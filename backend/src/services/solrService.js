@@ -1,4 +1,4 @@
-const { SOLR_URL, SOLR_COLLECTION } = require("../config/solr");
+import { SOLR_URL, SOLR_COLLECTION } from "../config/solr.js";
 
 function buildParams(params) {
   const search = new URLSearchParams();
@@ -26,6 +26,4 @@ async function searchSolr(queryParams) {
   return response.json();
 }
 
-module.exports = {
-  searchSolr,
-};
+export { searchSolr };

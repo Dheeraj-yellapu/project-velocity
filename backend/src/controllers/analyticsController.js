@@ -1,10 +1,8 @@
 function analyticsController(req, res) {
   res.json({
-    message: "Analytics endpoint scaffolded",
+    message: "Analytics endpoint ready",
     timestamp: new Date().toISOString(),
   });
 }
 
-module.exports = {
-  analyticsController,
-};
+export { analyticsController };

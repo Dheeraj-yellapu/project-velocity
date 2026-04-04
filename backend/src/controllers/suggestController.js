@@ -1,4 +1,4 @@
-const { searchSolr } = require("../services/solrService");
+import { searchSolr } from "../services/solrService.js";
 
 async function suggestController(req, res, next) {
   try {
@@ -17,6 +17,4 @@ async function suggestController(req, res, next) {
   }
 }
 
-module.exports = {
-  suggestController,
-};
+export { suggestController };

@@ -1,9 +1,8 @@
-const express = require("express");
-const cors = require("cors");
-
-const searchRoutes = require("./routes/search");
-const suggestRoutes = require("./routes/suggest");
-const analyticsRoutes = require("./routes/analytics");
+import express from "express";
+import cors from "cors";
+import searchRoutes from "./routes/search.js";
+import suggestRoutes from "./routes/suggest.js";
+import analyticsRoutes from "./routes/analytics.js";
 
 const app = express();
 
@@ -19,10 +18,11 @@ app.use("/api/suggest", suggestRoutes);
 app.use("/api/analytics", analyticsRoutes);
 
 app.use((err, _req, res, _next) => {
+  console.error(err);
   res.status(500).json({
     error: "Internal server error",
     detail: err.message,
   });
 });
 
-module.exports = app;
+export default app;

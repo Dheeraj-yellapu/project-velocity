@@ -1,7 +1,7 @@
-const express = require("express");
-const { suggestController } = require("../controllers/suggestController");
+import express from "express";
+import { suggestController } from "../controllers/suggestController.js";
 
 const router = express.Router();
 router.get("/", suggestController);
 
-module.exports = router;
+export default router;

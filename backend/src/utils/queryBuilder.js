@@ -28,6 +28,4 @@ function buildSearchQuery({ q, category, from, to, page = 1, pageSize = 10 }) {
   };
 }
 
-module.exports = {
-  buildSearchQuery,
-};
+export { buildSearchQuery };

@@ -3,4 +3,4 @@ const cacheService = {
   set: async () => {},
 };
 
-module.exports = cacheService;
+export default cacheService;

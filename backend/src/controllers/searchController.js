@@ -1,5 +1,5 @@
-const { buildSearchQuery } = require("../utils/queryBuilder");
-const { searchSolr } = require("../services/solrService");
+import { buildSearchQuery } from "../utils/queryBuilder.js";
+import { searchSolr } from "../services/solrService.js";
 
 async function searchController(req, res, next) {
   try {
@@ -11,6 +11,4 @@ async function searchController(req, res, next) {
   }
 }
 
-module.exports = {
-  searchController,
-};
+export { searchController };

@@ -1,7 +1,7 @@
-const express = require("express");
-const { analyticsController } = require("../controllers/analyticsController");
+import express from "express";
+import { analyticsController } from "../controllers/analyticsController.js";
 
 const router = express.Router();
 router.get("/", analyticsController);
 
-module.exports = router;
+export default router;

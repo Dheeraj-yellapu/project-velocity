@@ -1,21 +1,22 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Project Velocity Backend API",
   "main": "src/server.js",
+  "type": "module",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "echo \"No tests configured yet\""
+    "test": "echo \"Tests not configured yet\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
+    "express": "^5.2.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
-    "express": "^5.2.1",
     "node-fetch": "^3.3.2"
-  }
+  },
+  "devDependencies": {}
 }
