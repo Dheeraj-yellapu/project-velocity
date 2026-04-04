@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Minimal starter schema; customize for your collection fields -->
+<schema name="news" version="1.6">
+  <uniqueKey>id</uniqueKey>
+  <field name="id" type="string" indexed="true" stored="true" required="true" />
+  <field name="title" type="text_general" indexed="true" stored="true" />
+  <field name="content" type="text_general" indexed="true" stored="true" />
+  <field name="category" type="string" indexed="true" stored="true" />
+  <field name="published_at" type="pdate" indexed="true" stored="true" />
+
+  <fieldType name="string" class="solr.StrField" sortMissingLast="true" />
+  <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
+    <analyzer type="index">
+      <tokenizer class="solr.StandardTokenizerFactory" />
+      <filter class="solr.LowerCaseFilterFactory" />
+    </analyzer>
+    <analyzer type="query">
+      <tokenizer class="solr.StandardTokenizerFactory" />
+      <filter class="solr.LowerCaseFilterFactory" />
+    </analyzer>
+  </fieldType>
+  <fieldType name="pdate" class="solr.DatePointField" docValues="true" />
+</schema>

@@ -1,0 +1,41 @@
+# Node dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Build and coverage
+frontend/build/
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+logs/
+analytics/logs/*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python artifacts
+__pycache__/
+*.pyc
+.venv/
+
+# Solr/data temporary exports
+solr/**/*.bak
+data/raw/*.zip
+data/raw/*.gz
