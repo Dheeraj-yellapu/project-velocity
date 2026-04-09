@@ -7,16 +7,19 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "echo \"Tests not configured yet\""
+    "test": "echo \"Tests not configured yet\"",
+    "solr:setup": "node src/scripts/setupSolr.js",
+    "solr:setup:local": "node src/scripts/setupSolr.js --start-local"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^5.2.1",
+    "axios": "^1.15.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.0",
-    "node-fetch": "^3.3.2"
-  },
-  "devDependencies": {}
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2",
+    "redis": "^5.11.0"
+  }
 }

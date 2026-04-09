@@ -1,0 +1,11 @@
+{
+  "add-field": [
+    { "name": "url", "type": "string", "indexed": false, "stored": true },
+    { "name": "type", "type": "string", "stored": true, "docValues": true },
+    { "name": "title", "type": "text_general", "stored": true },
+    { "name": "lang", "type": "string", "stored": true, "docValues": true },
+    { "name": "published_at", "type": "pdate", "stored": true, "docValues": true },
+    { "name": "summary", "type": "text_general", "stored": true },
+    { "name": "body", "type": "text_general", "stored": true }
+  ]
+}

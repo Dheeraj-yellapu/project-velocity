@@ -5,7 +5,7 @@ export default function Navbar({ mode, onNavigate, currentPage }) {
 
   return (
     <nav className="navbar">
-      <div className="navbar-brand" onClick={() => onNavigate(mode === "admin" ? "admin" : "search")}>
+      <div className="navbar-brand" onClick={() => onNavigate(mode === "admin" ? "admin" : "dashboard")}>
         <div className="brand-icon">
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
             <circle cx="11" cy="11" r="10" stroke="#3B82F6" strokeWidth="1.5"/>
@@ -21,6 +21,7 @@ export default function Navbar({ mode, onNavigate, currentPage }) {
 
       {mode === "user" && (
         <div className="navbar-links">
+          <button className={`nav-link ${currentPage === "dashboard" ? "active" : ""}`} onClick={() => onNavigate("dashboard")}>Dashboard</button>
           <button className={`nav-link ${currentPage === "search" ? "active" : ""}`} onClick={() => onNavigate("search")}>Search</button>
           <button className="nav-link">About</button>
         </div>
