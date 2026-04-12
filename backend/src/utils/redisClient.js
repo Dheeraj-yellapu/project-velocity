@@ -148,10 +148,43 @@ async function cacheDel(key) {
 }
 
 /**
+ * Log a search metric to a rolling Redis list
+ */
+async function logSearchMetric(metric) {
+  if (connectFailed) return;
+  try {
+    const redis = await getClient();
+    if (!redis) return;
+    const key = "analytics:requests";
+    await redis.lPush(key, JSON.stringify(metric));
+    // Keep only the last 10000 queries
+    await redis.lTrim(key, 0, 9999);
+  } catch (err) {
+    console.warn("[Redis] logMetric error:", err.message);
+  }
+}
+
+/**
+ * Get all search metrics from the list
+ */
+async function getSearchMetrics() {
+  if (connectFailed) return [];
+  try {
+    const redis = await getClient();
+    if (!redis) return [];
+    const elements = await redis.lRange("analytics:requests", 0, -1);
+    return elements.map((e) => JSON.parse(e));
+  } catch (err) {
+    console.warn("[Redis] getMetrics error:", err.message);
+    return [];
+  }
+}
+
+/**
  * Check if Redis is currently connected.
  */
 function isRedisConnected() {
   return isConnected;
 }
 
-export { cacheGet, cacheSet, cacheDel, isRedisConnected, CACHE_TTL };
+export { cacheGet, cacheSet, cacheDel, isRedisConnected, CACHE_TTL, logSearchMetric, getSearchMetrics };

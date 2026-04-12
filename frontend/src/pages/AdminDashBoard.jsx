@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function Sparkline({ data, color = "#3B82F6", height = 60 }) {
   if (!data || data.length === 0) return null;
@@ -6,7 +6,7 @@ function Sparkline({ data, color = "#3B82F6", height = 60 }) {
   const min = Math.min(...data);
   const range = max - min || 1;
   const w = 300, h = height;
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * (h - 10) - 5}`).join(" ");
+  const pts = data.map((v, i) => `${(i / (data.length - 1 || 1)) * w},${h - ((v - min) / range) * (h - 10) - 5}`).join(" ");
   return (
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height }} preserveAspectRatio="none">
       <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round"/>
@@ -14,23 +14,6 @@ function Sparkline({ data, color = "#3B82F6", height = 60 }) {
     </svg>
   );
 }
-
-const QPS_DATA = [980, 1020, 1100, 1050, 990, 1080, 1150, 1200, 1180, 1247, 1190, 1210, 1247, 1230, 1247];
-const LAT_DATA = [120, 138, 145, 130, 155, 142, 138, 150, 142, 145, 140, 148, 142, 139, 142];
-
-const TOP_QUERIES = [
-  { q: "housing crisis uk", count: 12543, lat: 120 },
-  { q: "interest rates", count: 8921, lat: 98 },
-  { q: "inflation 2024", count: 6231, lat: 110 },
-  { q: "election results", count: 4567, lat: 130 },
-  { q: "energy prices", count: 3210, lat: 95 },
-];
-
-const HEATMAP_DATA = (() => {
-  const hours = ["12 AM", "6 AM", "12 PM", "6 PM"];
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  return hours.map(h => days.map(d => Math.floor(Math.random() * 100)));
-})();
 
 function HeatmapCell({ value }) {
   const intensity = value / 100;
@@ -41,17 +24,40 @@ function HeatmapCell({ value }) {
 }
 
 export default function AdminDashboard({ activeSection }) {
-  const [qpsRange, setQpsRange] = useState("6h");
+  const [qpsRange, setQpsRange] = useState("1h");
+  const [analytics, setAnalytics] = useState(null);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const res = await fetch(`/api/analytics?range=${qpsRange}`);
+        const data = await res.json();
+        setAnalytics(data);
+      } catch (err) {
+        console.error("Failed to load analytics", err);
+      }
+    };
+    
+    fetchAnalytics();
+    const interval = setInterval(fetchAnalytics, 3000); // refresh every 3 seconds
+    return () => clearInterval(interval);
+  }, [qpsRange]);
+
+  if (!analytics) {
+    return <div className="admin-overview" style={{ padding: 40, textAlign: 'center', opacity: 0.7 }}>Loading Live Analytics...</div>;
+  }
+
+  const { stats, charts, topQueries, heatmapData, logs } = analytics;
 
   if (activeSection === "overview") {
     return (
       <div className="admin-overview">
         <div className="stat-grid">
           {[
-            { label: "QPS (Current)", value: "1,247", delta: "+12.5%", color: "blue" },
-            { label: "Avg. Latency", value: "142 ms", delta: "+8.3%", color: "amber" },
-            { label: "Throughput", value: "89.3k", delta: "+5.7%", color: "green" },
-            { label: "Error Rate", value: "0.21%", delta: "+0.02%", color: "red" },
+            { label: "QPS (Current)", value: stats.qpsText, delta: "Live", color: "blue" },
+            { label: "Avg. Latency", value: stats.latencyText, delta: "Live", color: "amber" },
+            { label: "Throughput", value: stats.throughputText, delta: "Total in range", color: "green" },
+            { label: "Error Rate", value: stats.errorRateText, delta: "Live", color: "red" },
           ].map(s => (
             <div key={s.label} className="stat-card">
               <div className="stat-label">{s.label}</div>
@@ -73,12 +79,15 @@ export default function AdminDashboard({ activeSection }) {
             </div>
             <div className="chart-axes">
               <div className="y-labels">
-                {["2k", "1.5k", "1k", "500", "0"].map(l => <span key={l}>{l}</span>)}
+                {/* Dynamically adjust y labels? Keeping static layout for simplicity */}
+                {["High", "", "Mid", "", "Low"].map((l, i) => <span key={i}>{l}</span>)}
               </div>
               <div className="chart-area">
-                <Sparkline data={QPS_DATA} color="#3B82F6" height={120} />
+                <Sparkline data={charts.qpsData} color="#3B82F6" height={120} />
                 <div className="x-labels">
-                  {["10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30"].map(t => <span key={t}>{t}</span>)}
+                  <span>Start of Range</span>
+                  <span></span>
+                  <span>Now</span>
                 </div>
               </div>
             </div>
@@ -89,13 +98,13 @@ export default function AdminDashboard({ activeSection }) {
             <table className="query-table">
               <thead><tr><th>Query</th><th>Count</th><th>Avg. Latency</th></tr></thead>
               <tbody>
-                {TOP_QUERIES.map(q => (
+                {topQueries.length > 0 ? topQueries.map(q => (
                   <tr key={q.q}>
                     <td className="q-cell">{q.q}</td>
                     <td>{q.count.toLocaleString()}</td>
                     <td>{q.lat} ms</td>
                   </tr>
-                ))}
+                )) : <tr><td colSpan="3" style={{textAlign:"center", padding:20, opacity:0.5}}>No queries yet</td></tr>}
               </tbody>
             </table>
           </div>
@@ -110,7 +119,7 @@ export default function AdminDashboard({ activeSection }) {
             {["12 AM","6 AM","12 PM","6 PM"].map((h, hi) => (
               <div key={h} className="heatmap-row">
                 <span className="heatmap-hour">{h}</span>
-                {HEATMAP_DATA[hi].map((v, di) => <HeatmapCell key={di} value={v} />)}
+                {heatmapData[hi].map((v, di) => <HeatmapCell key={di} value={v} />)}
               </div>
             ))}
             <div className="heatmap-legend">
@@ -125,13 +134,52 @@ export default function AdminDashboard({ activeSection }) {
   }
 
   if (activeSection === "analytics") {
+    const { fast, medium, slow } = analytics.queryAnalytics?.latencyDistribution || { fast:0, medium:0, slow:0 };
+    const total = (fast + medium + slow) || 1;
+    const fastPct = ((fast/total)*100).toFixed(1);
+    const medPct = ((medium/total)*100).toFixed(1);
+    const slowPct = ((slow/total)*100).toFixed(1);
+
     return (
-      <div className="admin-section-placeholder">
-        <div className="placeholder-icon">↗</div>
-        <h3>Query Analytics</h3>
-        <p>Full query analytics with frequency distribution, slow query detection, and pattern analysis — Phase 6 implementation.</p>
-        <div className="placeholder-tags">
-          <span>BM25 Scoring</span><span>Slow Query Detection</span><span>Pattern Analysis</span><span>Export CSV/PDF</span>
+      <div className="admin-overview">
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-label">Fast Queries (&lt;50ms)</div>
+            <div className="stat-value" style={{color: 'rgb(22, 163, 74)'}}>{fastPct}%</div>
+            <div className="stat-delta">{fast} queries</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Medium Queries (&lt;200ms)</div>
+            <div className="stat-value" style={{color: 'rgb(245, 158, 11)'}}>{medPct}%</div>
+            <div className="stat-delta">{medium} queries</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Slow Queries (&ge;200ms)</div>
+            <div className="stat-value" style={{color: 'rgb(220, 38, 38)'}}>{slowPct}%</div>
+            <div className="stat-delta">{slow} queries</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Cache Solr Bypass</div>
+            <div className="stat-value">{stats.cacheHitRateText}</div>
+            <div className="stat-delta blue">Overall Hit Ratio</div>
+          </div>
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-header"><span className="chart-title">Top 5 Slowest Queries</span></div>
+          <table className="query-table full">
+            <thead><tr><th>Timestamp</th><th>Query</th><th>Latency</th><th>Source</th></tr></thead>
+            <tbody>
+              {analytics.queryAnalytics?.slowQueries.length > 0 ? analytics.queryAnalytics.slowQueries.map((q, i) => (
+                <tr key={i}>
+                  <td className="mono">{new Date(q.timestamp).toLocaleTimeString()}</td>
+                  <td className="q-cell">{q.query}</td>
+                  <td><span style={{color: 'rgb(220, 38, 38)', fontWeight: 'bold'}}>{q.latency} ms</span></td>
+                  <td>{q.source === "cache" ? "Hit" : "Miss (Solr)"}</td>
+                </tr>
+              )) : <tr><td colSpan="4" style={{textAlign:"center", padding:20, opacity:0.5}}>No queries yet</td></tr>}
+            </tbody>
+          </table>
         </div>
       </div>
     );
@@ -141,21 +189,24 @@ export default function AdminDashboard({ activeSection }) {
     return (
       <div className="admin-logs">
         <div className="chart-header" style={{marginBottom: 16}}>
-          <span className="chart-title">Query Logs</span>
-          <button className="export-btn">Export CSV</button>
+          <span className="chart-title">Live Query Logs ({logs.length})</span>
+          <button className="export-btn">Refresh</button>
         </div>
         <table className="query-table full">
-          <thead><tr><th>Timestamp</th><th>Query</th><th>Latency</th><th>Results</th><th>Status</th></tr></thead>
+          <thead><tr><th>Timestamp</th><th>Query</th><th>Latency</th><th>Results</th><th>Cache</th><th>Status</th></tr></thead>
           <tbody>
-            {[...Array(8)].map((_, i) => (
+            {logs.length > 0 ? logs.map((log, i) => (
               <tr key={i}>
-                <td className="mono">{new Date(Date.now() - i * 45000).toLocaleTimeString()}</td>
-                <td className="q-cell">{TOP_QUERIES[i % 5].q}</td>
-                <td>{Math.floor(90 + Math.random() * 80)} ms</td>
-                <td>{Math.floor(1000 + Math.random() * 15000).toLocaleString()}</td>
-                <td><span className={`status-badge ${i === 3 ? "warn" : "ok"}`}>{i === 3 ? "Slow" : "OK"}</span></td>
+                <td className="mono">{new Date(log.timestamp).toLocaleTimeString()}</td>
+                <td className="q-cell">{log.query}</td>
+                <td>{log.latency} ms</td>
+                <td>{log.results.toLocaleString()}</td>
+                <td>{log.source === "cache" ? "Hit" : "Miss"}</td>
+                <td><span className={`status-badge ${log.status === 'error' ? 'warn' : (log.latency > 500 ? 'warn' : 'ok')}`}>
+                  {log.status === 'error' ? 'Error' : (log.latency > 500 ? 'Slow' : 'OK')}
+                </span></td>
               </tr>
-            ))}
+            )) : <tr><td colSpan="6" style={{textAlign:"center", padding:40, opacity:0.5}}>No recent logs to display</td></tr>}
           </tbody>
         </table>
       </div>
@@ -163,13 +214,49 @@ export default function AdminDashboard({ activeSection }) {
   }
 
   if (activeSection === "heatmaps") {
+    // calculate busiest day and time
+    let maxV = 0; let mHi = 0; let mDi = 0;
+    heatmapData.forEach((row, hi) => {
+      row.forEach((v, di) => {
+        if (v > maxV) { maxV = v; mHi = hi; mDi = di; }
+      });
+    });
+    const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+    const hours = ["12 AM - 6 AM","6 AM - 12 PM","12 PM - 6 PM","6 PM - 12 AM"];
+
     return (
-      <div className="admin-section-placeholder">
-        <div className="placeholder-icon">⊞</div>
-        <h3>Heatmap Visualizations</h3>
-        <p>Interactive D3.js/Leaflet heatmaps for query frequency by time, topic, and geographic distribution — Phase 6 implementation.</p>
-        <div className="placeholder-tags">
-          <span>D3.js Heatmaps</span><span>Leaflet Maps</span><span>Time-series</span><span>Topic Distribution</span>
+      <div className="admin-overview">
+        <div className="stat-grid" style={{gridTemplateColumns: '1fr 1fr'}}>
+          <div className="stat-card">
+            <div className="stat-label">Busiest Time of Day</div>
+            <div className="stat-value">{maxV > 0 ? hours[mHi] : "N/A"}</div>
+            <div className="stat-delta blue">Peak traffic window</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Busiest Day of Week</div>
+            <div className="stat-value">{maxV > 0 ? days[mDi] : "N/A"}</div>
+            <div className="stat-delta green">Peak engagement day</div>
+          </div>
+        </div>
+
+        <div className="chart-card wide" style={{padding: '40px 20px'}}>
+          <div className="chart-header" style={{marginBottom: 30}}><span className="chart-title">Global Query Volume Heatmap</span></div>
+          <div className="heatmap-wrap" style={{transform: 'scale(1.2)', transformOrigin: 'top center', marginBottom: 60}}>
+            <div className="heatmap-days">
+              {days.map(d => <span key={d}>{d}</span>)}
+            </div>
+            {["12 AM","6 AM","12 PM","6 PM"].map((h, hi) => (
+              <div key={h} className="heatmap-row">
+                <span className="heatmap-hour">{h}</span>
+                {heatmapData[hi].map((v, di) => <HeatmapCell key={di} value={v} />)}
+              </div>
+            ))}
+            <div className="heatmap-legend">
+              <span>Low</span>
+              <div className="legend-bar" />
+              <span>High</span>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -181,9 +268,9 @@ export default function AdminDashboard({ activeSection }) {
         <div className="stat-grid">
           {[
             { label: "Cluster Status", value: "Healthy", delta: "5/5 nodes", color: "green" },
-            { label: "Index Size", value: "1.2 TB", delta: "↑ 0.3GB today", color: "blue" },
-            { label: "Cache Hit Rate", value: "78.4%", delta: "+2.1%", color: "amber" },
-            { label: "Active Shards", value: "12", delta: "ZK: healthy", color: "green" },
+            { label: "Index Size", value: "Live", delta: "↑ Connected", color: "blue" },
+            { label: "Cache Hit Rate", value: stats.cacheHitRateText, delta: "Live", color: "amber" },
+            { label: "Active Shards", value: "Solr", delta: "ZK: healthy", color: "green" },
           ].map(s => (
             <div key={s.label} className="stat-card">
               <div className="stat-label">{s.label}</div>
@@ -193,9 +280,9 @@ export default function AdminDashboard({ activeSection }) {
           ))}
         </div>
         <div className="chart-card">
-          <div className="chart-header"><span className="chart-title">Latency Over Time</span></div>
+          <div className="chart-header"><span className="chart-title">Latency Over Time (Bucket Averages)</span></div>
           <div className="chart-axes">
-            <div className="chart-area"><Sparkline data={LAT_DATA} color="#F59E0B" height={100} /></div>
+            <div className="chart-area"><Sparkline data={charts.latData} color="#F59E0B" height={100} /></div>
           </div>
         </div>
       </div>
@@ -206,7 +293,7 @@ export default function AdminDashboard({ activeSection }) {
     <div className="admin-section-placeholder">
       <div className="placeholder-icon">⚙</div>
       <h3>Settings</h3>
-      <p>System configuration, rate limits, authentication settings — Phase 6 implementation.</p>
+      <p>System configuration, rate limits, authentication settings.</p>
     </div>
   );
 }

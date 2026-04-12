@@ -1,6 +1,6 @@
 import { buildSearchQuery } from "../utils/queryBuilder.js";
 import { searchSolr } from "../services/solrService.js";
-import { cacheGet, cacheSet } from "../utils/redisClient.js";
+import { cacheGet, cacheSet, logSearchMetric } from "../utils/redisClient.js";
 
 /**
  * GET /api/search?q=XYZ
@@ -34,6 +34,16 @@ async function searchController(req, res, next) {
       console.log(
         `[Search] CACHE HIT  q="${rawQuery}"  latency=${totalLatency}ms`
       );
+
+      logSearchMetric({
+        timestamp: startTime,
+        query: rawQuery,
+        latency: totalLatency,
+        results: cached.total,
+        source: "cache",
+        status: "ok"
+      }).catch(() => {});
+
       return res.json({
         ...cached,
         total_latency_ms: totalLatency,
@@ -68,12 +78,32 @@ async function searchController(req, res, next) {
       `[Search] SOLR QUERY  q="${rawQuery}"  QTime=${qtime}ms  total=${totalLatency}ms  docs=${numFound}`
     );
 
+    logSearchMetric({
+      timestamp: startTime,
+      query: rawQuery,
+      latency: totalLatency,
+      results: numFound,
+      source: "solr",
+      status: "ok"
+    }).catch(() => {});
+
     return res.json({
       ...payload,
       total_latency_ms: totalLatency,
       source: "solr",
     });
   } catch (error) {
+    const rawQuery = (req.query.q || "").trim();
+    if (rawQuery) {
+      logSearchMetric({
+        timestamp: startTime,
+        query: rawQuery,
+        latency: Date.now() - startTime,
+        results: 0,
+        source: "error",
+        status: "error"
+      }).catch(() => {});
+    }
     next(error);
   }
 }
