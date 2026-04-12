@@ -2,26 +2,47 @@ import { buildSearchQuery } from "../utils/queryBuilder.js";
 import { searchSolr } from "../services/solrService.js";
 import { cacheGet, cacheSet, logSearchMetric } from "../utils/redisClient.js";
 
-/**
- * ── Request Coalescing (Single-Flight) ──────────────────────────────
- * When 100 concurrent requests arrive for the same query before the
- * cache is populated, only ONE request actually queries Solr.
- * The other 99 await the same in-flight Promise and share the result.
- * This prevents cache stampede from overwhelming Solr.
- * ──────────────────────────────────────────────────────────────────── */
+/** ═══════════════════════════════════════════════════════════════════
+ *  ── L1: In-Memory Cache (0ms latency) ─────────────────────────────
+ *  Fastest layer: serves repeated queries without ANY network call.
+ *  TTL: 30 seconds. Max entries: 500 (auto-evicts oldest).
+ *  ═══════════════════════════════════════════════════════════════════ */
+const L1_TTL_MS = 30_000; // 30 seconds
+const L1_MAX_ENTRIES = 500;
+const memoryCache = new Map();
+
+function l1Get(key) {
+  const entry = memoryCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > L1_TTL_MS) {
+    memoryCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function l1Set(key, data) {
+  // Evict oldest entries if at capacity
+  if (memoryCache.size >= L1_MAX_ENTRIES) {
+    const oldest = memoryCache.keys().next().value;
+    memoryCache.delete(oldest);
+  }
+  memoryCache.set(key, { data, ts: Date.now() });
+}
+
+/** ═══════════════════════════════════════════════════════════════════
+ *  ── Request Coalescing (Single-Flight) ────────────────────────────
+ *  When 100 concurrent requests arrive for the same query before the
+ *  cache is populated, only ONE request actually queries Solr.
+ *  The other 99 await the same in-flight Promise and share the result.
+ *  ═══════════════════════════════════════════════════════════════════ */
 const inflightQueries = new Map();
 
-/**
- * Execute a Solr query with single-flight deduplication.
- * If an identical query is already in progress, piggyback on it.
- */
 async function singleFlightSolrQuery(cacheKey, queryParams) {
-  // If this exact query is already in-flight, wait for it
   if (inflightQueries.has(cacheKey)) {
     return inflightQueries.get(cacheKey);
   }
 
-  // Otherwise, start the query and register the promise
   const queryPromise = (async () => {
     try {
       const solrResponse = await searchSolr(queryParams);
@@ -35,12 +56,12 @@ async function singleFlightSolrQuery(cacheKey, queryParams) {
         qtime_ms: qtime,
       };
 
-      // Populate cache so future requests skip Solr entirely
+      // Populate L1 + L2 caches
+      l1Set(cacheKey, payload);
       cacheSet(cacheKey, payload).catch(() => {});
 
       return { payload, qtime };
     } finally {
-      // Always clean up the in-flight entry
       inflightQueries.delete(cacheKey);
     }
   })();
@@ -49,17 +70,16 @@ async function singleFlightSolrQuery(cacheKey, queryParams) {
   return queryPromise;
 }
 
-/**
- * GET /api/search?q=XYZ
+/** ═══════════════════════════════════════════════════════════════════
+ *  GET /api/search?q=XYZ
  *
- * Flow:
- *   1. Check Redis for `search:{query}` → return cached if hit
- *   2. Single-flight: coalesce duplicate in-flight Solr queries
- *   3. Build edismax query with field boosting + recency bias
- *   4. Query Solr via Axios (only 1 request per unique query)
- *   5. Cache the structured response in Redis (60s TTL)
- *   6. Return results + performance metrics to the client
- */
+ *  3-Tier Cache Architecture:
+ *    L1 → In-Memory Map  (0ms,  local process)
+ *    L2 → Redis           (1-5ms, shared across machines)
+ *    L3 → Solr            (50-200ms, source of truth)
+ *
+ *  + Single-Flight coalescing prevents stampede at L3
+ *  ═══════════════════════════════════════════════════════════════════ */
 async function searchController(req, res, next) {
   const startTime = Date.now();
 
@@ -73,13 +93,9 @@ async function searchController(req, res, next) {
       });
     }
 
-    // ── Extract filter/sort/pagination params ────────────────────────
     const { type, lang, from, to, sort, start, rows } = req.query;
 
-    // ── 1. Cache check ──────────────────────────────────────────────
-    // Normalize defaults so the key is ALWAYS the same for the same
-    // logical query, regardless of whether params are explicit or omitted.
-    // e.g. "bomb" from loadtest, browser, or teammate all → "search:bomb|relevance|0|10"
+    // ── Normalized cache key ─────────────────────────────────────────
     const normSort  = sort  || "relevance";
     const normStart = start || "0";
     const normRows  = rows  || "10";
@@ -87,39 +103,57 @@ async function searchController(req, res, next) {
       .filter(Boolean)
       .join("|");
     const cacheKey = `search:${cacheKeyParts}`;
-    const cached = await cacheGet(cacheKey);
 
-    if (cached) {
+    // ── L1: In-Memory Cache (0ms) ────────────────────────────────────
+    const memCached = l1Get(cacheKey);
+    if (memCached) {
       const totalLatency = Date.now() - startTime;
-      console.log(
-        `[Search] CACHE HIT  q="${rawQuery}"  latency=${totalLatency}ms`
-      );
 
       logSearchMetric({
         timestamp: startTime,
         query: rawQuery,
         latency: totalLatency,
-        results: cached.total,
+        results: memCached.total,
         source: "cache",
         status: "ok"
       }).catch(() => {});
 
       return res.json({
-        ...cached,
+        ...memCached,
         total_latency_ms: totalLatency,
         source: "cache",
       });
     }
 
-    // ── 2. Build edismax query ──────────────────────────────────────
-    const queryParams = buildSearchQuery(req.query);
+    // ── L2: Redis Cache (1-5ms) ──────────────────────────────────────
+    const redisCached = await cacheGet(cacheKey);
+    if (redisCached) {
+      const totalLatency = Date.now() - startTime;
 
-    // ── 3. Query Solr (coalesced — only 1 flight per unique query) ──
+      // Promote to L1 for next time
+      l1Set(cacheKey, redisCached);
+
+      logSearchMetric({
+        timestamp: startTime,
+        query: rawQuery,
+        latency: totalLatency,
+        results: redisCached.total,
+        source: "cache",
+        status: "ok"
+      }).catch(() => {});
+
+      return res.json({
+        ...redisCached,
+        total_latency_ms: totalLatency,
+        source: "cache",
+      });
+    }
+
+    // ── L3: Solr (coalesced — only 1 flight per unique query) ────────
+    const queryParams = buildSearchQuery(req.query);
     const { payload, qtime } = await singleFlightSolrQuery(cacheKey, queryParams);
 
-    // ── 4. Return ───────────────────────────────────────────────────
     const totalLatency = Date.now() - startTime;
-    const source = inflightQueries.has(cacheKey) ? "coalesced" : "solr";
     console.log(
       `[Search] SOLR QUERY  q="${rawQuery}"  QTime=${qtime}ms  total=${totalLatency}ms  docs=${payload.total}`
     );
