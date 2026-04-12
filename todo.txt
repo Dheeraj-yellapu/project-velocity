@@ -1,0 +1,14 @@
+1) QPS and latency
+2) Query suggestion improvement (Use llm to modify the query and suggest there itself)
+3) UI changes (Like user to admin direct without password??, new/oldest??)
+4) Dataset updation
+5) Unusual traffic to be blocked by user
+6) Admin, What exactly to put, Graph numbering in overview,settings?
+7) Configuration of solr on which actually gives us the best results
+8) Exportable benchmark reports as CSV/PDF with embedded graphs, Chart.js
+9) ETL Dataset Pipleine Apache Airflow
+10) Performance Profiling CPU/Memory/Disk metrics during load tests Prometheus/Grafana
+11) 01:47:31	biden vs trump vs modi	100 ms	14,691	Miss	OK
+01:47:30	heaven	0 ms	75	Hit	OK
+01:47:20	heaven	204 ms	75	Miss	OK
+What is this issue here
