@@ -25,8 +25,14 @@ async function searchController(req, res, next) {
       });
     }
 
-    // ── 1. Cache check ──────────────────────────────────────────────
-    const cacheKey = `search:${rawQuery}`;
+    // ── Extract filter/sort/pagination params ────────────────────────
+    const { type, lang, from, to, sort, start, rows } = req.query;
+
+    // ── 1. Cache check (key includes filters + sort for uniqueness) ──
+    const cacheKeyParts = [rawQuery, type, lang, from, to, sort, start, rows]
+      .filter(Boolean)
+      .join("|");
+    const cacheKey = `search:${cacheKeyParts}`;
     const cached = await cacheGet(cacheKey);
 
     if (cached) {

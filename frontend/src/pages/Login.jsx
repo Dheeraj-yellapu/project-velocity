@@ -1,15 +1,17 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const ADMIN_CODE = "velocity2024";
 
-export default function Login({ onLogin }) {
+export default function Login() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState(null); // null | "user" | "admin"
   const [code, setCode] = useState("");
   const [showCode, setShowCode] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleUserContinue = () => { onLogin("user"); };
+  const handleUserContinue = () => { navigate("/user"); };
 
   const handleAdminSelect = () => {
     setMode("admin");
@@ -22,7 +24,7 @@ export default function Login({ onLogin }) {
     setLoading(true);
     await new Promise(r => setTimeout(r, 600));
     if (code === ADMIN_CODE) {
-      onLogin("admin");
+      navigate("/admin");
     } else {
       setError("Invalid access code");
       setLoading(false);

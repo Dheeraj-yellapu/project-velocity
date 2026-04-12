@@ -1,36 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearch } from "../hooks/useSearch";
 import SearchBar from "../components/SearchBar";
 import Filters from "../components/Filters";
 import ResultCard from "../components/ResultCard";
 
-const MOCK_RESULTS = [
-  { url: "https://theguardian.com/housing-2016", title: "Five steps to fixing the UK housing crisis in 2016", type: "Politics", pub: "2016-01-01T00:00:00Z", lang: "en", sum: "Headlines about the utter madness of our housing market dominated 2015. It's time to make some new year's resolutions...", body: "Perhaps in years to come 2015 will be remembered as the year the housing crisis went mainstream. My fellow housing and economics journalists have been wailing like Cassandra for years now..." },
-  { url: "https://bbc.com/news/uk-housing-market-slowdown", title: "UK housing market sees unexpected slowdown", type: "Economy", pub: "2024-03-15T00:00:00Z", lang: "en", sum: "The UK housing market has shown signs of cooling as interest rates remain high. House prices in several regions have plateaued...", body: "House prices in several regions have plateaued, with buyers becoming more cautious. Experts suggest this could be a turning point..." },
-  { url: "https://ft.com/content/uk-housing-approach", title: "Why the UK needs a new approach to housing", type: "Housing", pub: "2024-02-10T00:00:00Z", lang: "en", sum: "Britain's housing crisis demands bold solutions. After decades of underbuilding, local councils, housing associations, and the private sector must work together...", body: "Local councils, housing associations, and the private sector must work together to deliver affordable homes..." },
-  { url: "https://independent.co.uk/housing-policy", title: "Housing policy reform: what the experts say", type: "Society", pub: "2024-01-20T00:00:00Z", lang: "en", sum: "A panel of economists and urban planners share their views on what it will take to fix Britain's chronic housing shortage...", body: "The shortage of affordable housing continues to be one of the most pressing social issues in Britain today..." },
-];
-
-const MOCK_SUGGESTIONS = ["housing crisis uk", "housing policy reforms", "affordable housing uk", "london rent prices"];
-
-export default function Search({ onNavigate }) {
-  const { query, setQuery, filters, setFilters, results, loading, error, meta, suggestions, setSuggestions, search, fetchSuggestions } = useSearch();
+export default function Search() {
+  const { query, setQuery, filters, setFilters, results, loading, error, meta, suggestions, search, fetchSuggestions } = useSearch();
   const [hasSearched, setHasSearched] = useState(false);
-  const [sort, setSort] = useState("relevance");
   const [viewMode, setViewMode] = useState("list");
 
-  // Use mock data for demo
-  const displayResults = hasSearched ? MOCK_RESULTS : [];
-  const displayMeta = hasSearched ? { total: 12540, elapsed: "0.38" } : { total: 0, elapsed: 0 };
-  const displaySuggestions = query.length >= 2 ? MOCK_SUGGESTIONS : [];
+  // Re-search when filters change (only if we already searched)
+  useEffect(() => {
+    if (hasSearched && query.trim()) {
+      search(query, filters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
-  const handleSearch = () => {
+  const handleSearch = useCallback(() => {
+    if (!query.trim()) return;
     setHasSearched(true);
-  };
+    search(query, filters);
+  }, [query, filters, search]);
 
   const handleSuggestion = (s) => {
     setQuery(s);
     setHasSearched(true);
+    search(s, filters);
   };
 
   return (
@@ -38,9 +34,9 @@ export default function Search({ onNavigate }) {
       <div className="search-hero">
         <SearchBar
           query={query}
-          onChange={(q) => { setQuery(q); }}
+          onChange={(q) => { setQuery(q); fetchSuggestions(q); }}
           onSearch={handleSearch}
-          suggestions={displaySuggestions}
+          suggestions={suggestions}
           onSuggestionClick={handleSuggestion}
           onClear={() => { setQuery(""); setHasSearched(false); }}
         />
@@ -51,15 +47,19 @@ export default function Search({ onNavigate }) {
           <Filters filters={filters} onChange={setFilters} />
 
           <section className="results-area">
+            {/* ── Metrics bar ─────────────────────────────────── */}
             <div className="results-meta-bar">
-              <span className="results-count">About {displayMeta.total.toLocaleString()} results ({displayMeta.elapsed}s)</span>
+              <span className="results-count">
+                {loading ? "Searching..." : `About ${(meta.total || 0).toLocaleString()} results (${meta.elapsed || 0}s)`}
+              </span>
               <div className="results-controls">
-                <label className="sort-label">Sort by:</label>
-                <select className="sort-select" value={sort} onChange={e => setSort(e.target.value)}>
-                  <option value="relevance">Relevance</option>
-                  <option value="date">Date</option>
-                  <option value="popularity">Popularity</option>
-                </select>
+                {meta.source && !loading && (
+                  <span className={`source-indicator ${meta.source === "cache" ? "cache" : "solr"}`}>
+                    <span className="source-dot" />
+                    {meta.source === "cache" ? "Redis Cache" : "Solr"}
+                    {meta.total_latency_ms != null && ` · ${meta.total_latency_ms}ms`}
+                  </span>
+                )}
                 <button className={`view-btn ${viewMode === "list" ? "active" : ""}`} onClick={() => setViewMode("list")}>
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect y="2" width="16" height="2" rx="1"/><rect y="7" width="16" height="2" rx="1"/><rect y="12" width="16" height="2" rx="1"/></svg>
                 </button>
@@ -69,9 +69,40 @@ export default function Search({ onNavigate }) {
               </div>
             </div>
 
-            <div className={`results-list ${viewMode === "grid" ? "grid" : ""}`}>
-              {displayResults.map((r, i) => <ResultCard key={i} result={r} />)}
-            </div>
+            {/* ── Loading ──────────────────────────────────────── */}
+            {loading && (
+              <div className="search-loading">
+                <div className="search-spinner" />
+                <span>Querying Solr index...</span>
+              </div>
+            )}
+
+            {/* ── Error ────────────────────────────────────────── */}
+            {error && !loading && (
+              <div className="search-error-card">
+                <span className="error-badge">⚠</span>
+                <div>
+                  <div className="error-heading">Search Error</div>
+                  <p className="error-detail">{error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* ── Results ──────────────────────────────────────── */}
+            {!loading && !error && (
+              <div className={`results-list ${viewMode === "grid" ? "grid" : ""}`}>
+                {results.length > 0 ? (
+                  results.map((r, i) => <ResultCard key={r.id || i} result={r} />)
+                ) : (
+                  <div className="no-results-msg">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#8B949E" strokeWidth="1.5" opacity="0.4">
+                      <circle cx="22" cy="22" r="16"/><path d="M34 34l10 10" strokeLinecap="round"/>
+                    </svg>
+                    <p>No results found for &ldquo;{query}&rdquo;</p>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </div>
       )}
@@ -84,6 +115,13 @@ export default function Search({ onNavigate }) {
             </svg>
           </div>
           <p className="empty-text">Enter a search query to explore news articles</p>
+          <div className="quick-search-chips">
+            {["politics", "economy", "technology", "climate", "sports"].map(chip => (
+              <button key={chip} className="quick-chip-btn" onClick={() => { setQuery(chip); setHasSearched(true); search(chip, filters); }}>
+                {chip}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import AdminDashboard from "../pages/AdminDashBoard";
 
 const ADMIN_SECTIONS = [
   { id: "overview", icon: "◈", label: "Overview" },
@@ -9,7 +11,9 @@ const ADMIN_SECTIONS = [
   { id: "settings", icon: "⚙", label: "Settings" },
 ];
 
-export default function AdminLayout({ children, activeSection, onSectionChange, onNavigate }) {
+export default function AdminLayout() {
+  const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState("overview");
   const now = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const [time, setTime] = useState(now);
 
@@ -21,7 +25,7 @@ export default function AdminLayout({ children, activeSection, onSectionChange, 
   return (
     <div className="layout-admin">
       <aside className="admin-sidebar">
-        <div className="sidebar-brand" onClick={() => onNavigate("admin")}>
+        <div className="sidebar-brand" onClick={() => setActiveSection("overview")}>
           <div className="brand-icon sm">
             <svg width="18" height="18" viewBox="0 0 22 22" fill="none">
               <circle cx="11" cy="11" r="10" stroke="#3B82F6" strokeWidth="1.5"/>
@@ -37,7 +41,7 @@ export default function AdminLayout({ children, activeSection, onSectionChange, 
 
         <nav className="sidebar-nav">
           {ADMIN_SECTIONS.map(s => (
-            <button key={s.id} className={`sidebar-item ${activeSection === s.id ? "active" : ""}`} onClick={() => onSectionChange(s.id)}>
+            <button key={s.id} className={`sidebar-item ${activeSection === s.id ? "active" : ""}`} onClick={() => setActiveSection(s.id)}>
               <span className="sidebar-icon">{s.icon}</span>
               <span>{s.label}</span>
             </button>
@@ -45,9 +49,13 @@ export default function AdminLayout({ children, activeSection, onSectionChange, 
         </nav>
 
         <div className="sidebar-footer">
-          <button className="sidebar-item exit" onClick={() => onNavigate("search")}>
+          <button className="sidebar-item switch-user" onClick={() => navigate("/user")}>
+            <span className="sidebar-icon">🔍</span>
+            <span>Switch to Search</span>
+          </button>
+          <button className="sidebar-item exit" onClick={() => navigate("/")}>
             <span className="sidebar-icon">←</span>
-            <span>Exit Admin</span>
+            <span>Logout</span>
           </button>
         </div>
       </aside>
@@ -58,10 +66,18 @@ export default function AdminLayout({ children, activeSection, onSectionChange, 
           <div className="admin-topbar-right">
             <span className="topbar-time">Last updated: {time}</span>
             <button className="icon-btn" title="Refresh">⟳</button>
+            <button className="switch-search-btn" onClick={() => navigate("/user")}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+                <circle cx="6" cy="6" r="4.5"/><path d="M9.5 9.5L13 13" strokeLinecap="round"/>
+              </svg>
+              Search Mode
+            </button>
             <div className="admin-avatar">A</div>
           </div>
         </header>
-        <div className="admin-content">{children}</div>
+        <div className="admin-content">
+          <AdminDashboard activeSection={activeSection} />
+        </div>
       </div>
     </div>
   );

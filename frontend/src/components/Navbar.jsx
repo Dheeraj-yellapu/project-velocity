@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 
-export default function Navbar({ mode, onNavigate, currentPage }) {
-  const [theme, setTheme] = useState("dark");
+export default function Navbar({ mode, currentPage }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const activePage = currentPage || (location.pathname.includes("/search") ? "search" : "dashboard");
 
   return (
     <nav className="navbar">
-      <div className="navbar-brand" onClick={() => onNavigate(mode === "admin" ? "admin" : "dashboard")}>
+      <div className="navbar-brand" onClick={() => navigate(mode === "admin" ? "/admin" : "/user")}>
         <div className="brand-icon">
           <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
             <circle cx="11" cy="11" r="10" stroke="#3B82F6" strokeWidth="1.5"/>
@@ -21,9 +24,8 @@ export default function Navbar({ mode, onNavigate, currentPage }) {
 
       {mode === "user" && (
         <div className="navbar-links">
-          <button className={`nav-link ${currentPage === "dashboard" ? "active" : ""}`} onClick={() => onNavigate("dashboard")}>Dashboard</button>
-          <button className={`nav-link ${currentPage === "search" ? "active" : ""}`} onClick={() => onNavigate("search")}>Search</button>
-          <button className="nav-link">About</button>
+          <button className={`nav-link ${activePage === "dashboard" ? "active" : ""}`} onClick={() => navigate("/user")}>Dashboard</button>
+          <button className={`nav-link ${activePage === "search" ? "active" : ""}`} onClick={() => navigate("/user/search")}>Search</button>
         </div>
       )}
 
@@ -34,17 +36,11 @@ export default function Navbar({ mode, onNavigate, currentPage }) {
       )}
 
       <div className="navbar-actions">
-        <button className="icon-btn" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} title="Toggle theme">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <circle cx="8" cy="8" r="3.5"/>
-            <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-          </svg>
-        </button>
-        <button className="admin-btn" onClick={() => onNavigate(mode === "admin" ? "search" : "login")}>
+        <button className="admin-btn" onClick={() => navigate(mode === "admin" ? "/user" : "/admin")}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" style={{marginRight: 6}}>
             <path d="M7 7a3 3 0 100-6 3 3 0 000 6zM2 12c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
           </svg>
-          {mode === "admin" ? "Exit Admin" : "Admin"}
+          {mode === "admin" ? "Switch to Search" : "Admin"}
         </button>
       </div>
     </nav>
