@@ -96,7 +96,7 @@ async function startLocalSolr() {
   }
 
   await exec("taskkill /F /IM java.exe >nul 2>&1", { shell: true }).catch(() => ({}));
-  await exec(`${SOLR_COMMAND} start -c -Dsolr.jetty.host=0.0.0.0`, { shell: true });
+  await exec(`${SOLR_COMMAND} start -c -m 2g -Dsolr.jetty.host=0.0.0.0`, { shell: true });
 
   await new Promise((resolve) => {
     setTimeout(resolve, SOLR_STARTUP_DELAY_MS);
