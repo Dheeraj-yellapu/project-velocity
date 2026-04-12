@@ -1,5 +1,12 @@
 import axios from "axios";
+import http from "http";
+import https from "https";
 import { SOLR_URL, SOLR_COLLECTION } from "../config/solr.js";
+
+// Limit concurrent connections to Solr to prevent ThreadPool crashes
+// Node will automatically queue excess requests over this limit
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 20 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 20 });
 
 /** ── Build URLSearchParams from an object (supports arrays for fq) ─ */
 function buildParams(params) {
@@ -27,6 +34,8 @@ async function searchSolr(queryParams) {
     const { data } = await axios.get(url, {
       timeout: 8000, // 8s timeout to prevent hanging
       headers: { Accept: "application/json" },
+      httpAgent,
+      httpsAgent,
     });
     return data;
   } catch (err) {
