@@ -19,6 +19,9 @@ let connectAttempted = false;
 let connectFailed = false;
 let retryCount = 0;
 
+// Local fallback memory list to keep Admin Dashboard alive when Redis is down
+const localLogsFallback = [];
+
 /**
  * Race a promise against a timeout.
  */
@@ -151,7 +154,12 @@ async function cacheDel(key) {
  * Log a search metric to a rolling Redis list
  */
 async function logSearchMetric(metric) {
-  if (connectFailed) return;
+  if (connectFailed) {
+    // If Redis is dead, use in-memory fallback so Admin dashboard still works!
+    localLogsFallback.unshift(metric);
+    if (localLogsFallback.length > 500) localLogsFallback.pop();
+    return;
+  }
   try {
     const redis = await getClient();
     if (!redis) return;
@@ -168,15 +176,15 @@ async function logSearchMetric(metric) {
  * Get all search metrics from the list
  */
 async function getSearchMetrics() {
-  if (connectFailed) return [];
+  if (connectFailed) return localLogsFallback;
   try {
     const redis = await getClient();
-    if (!redis) return [];
+    if (!redis) return localLogsFallback;
     const elements = await redis.lRange("analytics:requests", 0, -1);
     return elements.map((e) => JSON.parse(e));
   } catch (err) {
     console.warn("[Redis] getMetrics error:", err.message);
-    return [];
+    return localLogsFallback;
   }
 }
 
