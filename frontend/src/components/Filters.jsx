@@ -50,7 +50,7 @@ export default function Filters({ filters, onChange }) {
       <div className="filters-header">
         <span>Filters</span>
         <button className="clear-all" onClick={() => {
-          onChange({ type: "", lang: "", from: "", to: "", sort: "relevance" });
+          onChange({ type: "", lang: "", from: "", to: "", sort: "relevance", rows: 10 });
           setDatePreset("Any time");
           setCustomFrom("");
           setCustomTo("");
@@ -119,6 +119,17 @@ export default function Filters({ filters, onChange }) {
           <label key={s.value} className="radio-row">
             <input type="radio" name="sort" checked={filters.sort === s.value} onChange={() => onChange({ ...filters, sort: s.value })} />
             <span>{s.label}</span>
+          </label>
+        ))}
+      </div>
+
+      {/* ── Results Per Page ──────────────────────── */}
+      <div className="filter-section">
+        <div className="filter-label">Results Per Page</div>
+        {[10, 20, 50, 100].map(size => (
+          <label key={size} className="radio-row">
+            <input type="radio" name="rows" checked={Number(filters.rows) === size} onChange={() => onChange({ ...filters, rows: size })} />
+            <span>{size} results</span>
           </label>
         ))}
       </div>

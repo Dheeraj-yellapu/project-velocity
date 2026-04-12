@@ -3,7 +3,7 @@ import { searchService } from "../services/searchService";
 
 export function useSearch() {
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState({ type: "", lang: "", from: "", to: "", sort: "relevance" });
+  const [filters, setFilters] = useState({ type: "", lang: "", from: "", to: "", sort: "relevance", rows: 10 });
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -23,6 +23,7 @@ export function useSearch() {
         from: f.from || undefined,
         to: f.to || undefined,
         sort: f.sort || "relevance",
+        rows: f.rows || 10,
       });
       setResults(data.results || []);
       setMeta({
