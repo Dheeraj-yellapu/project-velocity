@@ -1,6 +1,55 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <config>
   <luceneMatchVersion>9.0.0</luceneMatchVersion>
-  <requestHandler name="/select" class="solr.SearchHandler" />
-  <requestHandler name="/suggest" class="solr.SearchHandler" />
+  
+  <!-- ── Query Result Cache (stores entire result sets) ────────────── -->
+  <cache name="queryResultCache"
+    class="solr.LRUCache"
+    size="512"
+    initialSize="512"
+    autowarmCount="256"
+  />
+  
+  <!-- ── Filter Cache (stores which docs match filters) ────────────── -->
+  <cache name="filterCache"
+    class="solr.LRUCache"
+    size="256"
+    initialSize="256"
+    autowarmCount="128"
+  />
+  
+  <!-- ── Document Cache (stores parsed documents) ──────────────────── -->
+  <cache name="documentCache"
+    class="solr.LRUCache"
+    size="512"
+    initialSize="512"
+  />
+  
+  <!-- ── Field Value Cache ───────────────────────────────────────────── -->
+  <cache name="fieldValueCache"
+    class="solr.LRUCache"
+    size="128"
+    initialSize="128"
+    autowarmCount="64"
+  />
+  
+  <!-- ── Main Search Handler ─────────────────────────────────────────── -->
+  <requestHandler name="/select" class="solr.SearchHandler">
+    <lst name="defaults">
+      <bool name="cache">true</bool>
+      <int name="rows">50</int>
+      <int name="timeAllowed">5000</int>
+      <bool name="timeAllowedExceeded">true</bool>
+      <str name="defType">edismax</str>
+    </lst>
+  </requestHandler>
+  
+  <!-- ── Suggestions Handler ──────────────────────────────────────────── -->
+  <requestHandler name="/suggest" class="solr.SearchHandler">
+    <lst name="defaults">
+      <bool name="cache">true</bool>
+      <int name="rows">10</int>
+      <int name="timeAllowed">1000</int>
+    </lst>
+  </requestHandler>
 </config>

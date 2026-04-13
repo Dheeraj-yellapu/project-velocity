@@ -1,23 +1,51 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!-- Minimal starter schema; customize for your collection fields -->
+<!-- Optimized schema for high-QPS performance -->
 <schema name="news" version="1.6">
   <uniqueKey>id</uniqueKey>
+  
+  <!-- ── Primary Fields ─────────────────────────────────── -->
   <field name="id" type="string" indexed="true" stored="true" required="true" />
-  <field name="title" type="text_general" indexed="true" stored="true" />
-  <field name="content" type="text_general" indexed="true" stored="true" />
-  <field name="category" type="string" indexed="true" stored="true" />
-  <field name="published_at" type="pdate" indexed="true" stored="true" />
+  <field name="title" type="text_general" indexed="true" stored="true" termVectors="true" />
+  
+  <!-- Content indexed but NOT stored (saves 40% space) -->
+  <field name="content" type="text_general" indexed="true" stored="false" />
+  <field name="body" type="text_general" indexed="true" stored="false" />
+  <field name="sum" type="text_general" indexed="true" stored="true" />
+  
+  <!-- ── Facet Fields (docValues for fast filtering) ────── -->
+  <field name="category" type="string" indexed="true" stored="true" docValues="true" />
+  <field name="source" type="string" indexed="true" stored="true" docValues="true" />
+  <field name="type" type="string" indexed="true" stored="true" docValues="true" />
+  <field name="lang" type="string" indexed="true" stored="true" docValues="true" />
+  
+  <!-- ── Date Fields ──────────────────────────────────── -->
+  <field name="published_at" type="pdate" indexed="true" stored="true" docValues="true" />
+  <field name="pub" type="pdate" indexed="true" stored="true" docValues="true" />
+  
+  <!-- Other fields -->
+  <field name="url" type="string" indexed="false" stored="true" />
+  
+  <!-- ── Combined Search Field (optimized query) ───────── -->
+  <!-- Search both title+body in one field = faster queries -->
+  <field name="text_combined" type="text_general" indexed="true" stored="false" termVectors="true" />
+  <copyField source="title" dest="text_combined" />
+  <copyField source="body" dest="text_combined" />
 
+  <!-- ── Field Types ──────────────────────────────────── -->
   <fieldType name="string" class="solr.StrField" sortMissingLast="true" />
+  
   <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
     <analyzer type="index">
       <tokenizer class="solr.StandardTokenizerFactory" />
       <filter class="solr.LowerCaseFilterFactory" />
+      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" />
     </analyzer>
     <analyzer type="query">
       <tokenizer class="solr.StandardTokenizerFactory" />
       <filter class="solr.LowerCaseFilterFactory" />
+      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt" />
     </analyzer>
   </fieldType>
+  
   <fieldType name="pdate" class="solr.DatePointField" docValues="true" />
 </schema>

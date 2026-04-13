@@ -3,10 +3,19 @@ import http from "http";
 import https from "https";
 import { SOLR_URL, SOLR_COLLECTION } from "../config/solr.js";
 
-// Limit concurrent connections to Solr to prevent ThreadPool crashes
-// Node will automatically queue excess requests over this limit
-const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 20 });
-const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 20 });
+// Connection pooling for better throughput under load
+// With 100 concurrent users, allow up to 50 persistent connections
+// Keeps sockets alive to reuse TCP connections (huge latency savings)
+const httpAgent = new http.Agent({ 
+  keepAlive: true, 
+  maxSockets: 50,
+  freeSocketTimeout: 30000  // Free up idle sockets after 30s
+});
+const httpsAgent = new https.Agent({ 
+  keepAlive: true, 
+  maxSockets: 50,
+  freeSocketTimeout: 30000  // Free up idle sockets after 30s
+});
 
 /** ── Build URLSearchParams from an object (supports arrays for fq) ─ */
 function buildParams(params) {
