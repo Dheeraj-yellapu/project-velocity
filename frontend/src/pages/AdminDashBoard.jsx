@@ -365,12 +365,13 @@ export default function AdminDashboard({ activeSection }) {
           <button className="export-btn">Refresh</button>
         </div>
         <table className="query-table full">
-          <thead><tr><th>Timestamp</th><th>Query</th><th>Latency</th><th>Results</th><th>Cache</th><th>Status</th></tr></thead>
+          <thead><tr><th>Timestamp</th><th>Query</th><th>IP</th><th>Latency</th><th>Results</th><th>Cache</th><th>Status</th></tr></thead>
           <tbody>
             {logs.length > 0 ? logs.map((log, i) => (
               <tr key={i}>
                 <td className="mono">{new Date(log.timestamp).toLocaleTimeString()}</td>
                 <td className="q-cell">{log.query}</td>
+                <td className="mono">{log.ip || "-"}</td>
                 <td>{typeof log.latency === 'number' ? log.latency.toFixed(2) : log.latency} ms</td>
                 <td>{log.results.toLocaleString()}</td>
                 <td>{log.source === "cache" ? "Hit" : "Miss"}</td>
@@ -378,7 +379,7 @@ export default function AdminDashboard({ activeSection }) {
                   {log.status === 'error' ? 'Error' : (log.latency > 500 ? 'Slow' : 'OK')}
                 </span></td>
               </tr>
-            )) : <tr><td colSpan="6" className="table-empty table-empty-lg">No recent logs to display</td></tr>}
+            )) : <tr><td colSpan="7" className="table-empty table-empty-lg">No recent logs to display</td></tr>}
           </tbody>
         </table>
       </div>
@@ -423,6 +424,29 @@ export default function AdminDashboard({ activeSection }) {
                 {heatmapData[hi].map((v, di) => <HeatmapCell key={di} value={v} />)}
               </div>
             ))}
+            <div className="heatmap-legend">
+              <span>Low</span>
+              <div className="legend-bar" />
+              <span>High</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="chart-card wide">
+          <div className="chart-header"><span className="chart-title">Previous 5 Weeks (Daily Heatmap)</span></div>
+          <div className="heatmap-wrap weekly-heatmap-wrap">
+            <div className="heatmap-days weekly-heatmap-days">
+              {(weeklyHeatmap?.dayLabels || days).map((d) => <span key={d}>{d}</span>)}
+            </div>
+            {(weeklyHeatmap?.data || []).map((row, wi) => (
+              <div key={wi} className="heatmap-row">
+                <span className="heatmap-hour weekly-heatmap-week-label">
+                  {weeklyHeatmap?.weekLabels?.[wi] || `Week ${wi + 1}`}
+                </span>
+                {row.map((v, di) => <HeatmapCell key={`${wi}-${di}`} value={v} />)}
+              </div>
+            ))}
+            {!weeklyHeatmap?.data?.length && <div className="table-empty">No weekly history yet</div>}
             <div className="heatmap-legend">
               <span>Low</span>
               <div className="legend-bar" />
@@ -586,60 +610,112 @@ export default function AdminDashboard({ activeSection }) {
 
   if (activeSection === "profiling") {
      if (!sysMetrics) return <div className="loading-center">Loading Profiling Metrics...</div>;
-     if (sysMetrics.error) return <div className="loading-center loading-error">Failed to load profiling data: {sysMetrics.details}</div>;
+     if (sysMetrics.error && (!sysMetrics.systems || sysMetrics.systems.length === 0)) {
+       return <div className="loading-center loading-error">Failed to load profiling data: {sysMetrics.details}</div>;
+     }
+
+     const systems = Array.isArray(sysMetrics.systems) ? sysMetrics.systems : [];
+     const cluster = sysMetrics.cluster || null;
     
     return (
        <div className="admin-overview">
         <div className="chart-header profiling-header">
            <span className="chart-title">Prometheus / Grafana Style Profiling</span>
-           <span className="source-indicator solr"><span className="source-dot" /> Live Metrics</span>
+           <span className="source-indicator solr"><span className="source-dot" /> Live Metrics ({systems.length} systems)</span>
          </div>
-        <div className="profiling-grid">
-          <div className="chart-card profiling-card">
-            <h4 className="metric-title-row">CPU Usage<span>{sysMetrics.cpu.percent}%</span></h4>
-            <progress className={`metric-progress ${sysMetrics.cpu.percent > 80 ? "metric-progress-danger" : "metric-progress-blue"}`} value={sysMetrics.cpu.percent} max="100" />
-            <div className="metric-meta">
-                 <div>Load Avg: {sysMetrics.cpu.load}</div>
-                 <div>Cores: {sysMetrics.cpu.cores} Array(vCPUs)</div>
-              </div>
-            </div>
+        <div className="system-metrics-grid">
+          {systems.map((system) => {
+            if (system.status !== "ok") {
+              return (
+                <div className="chart-card profiling-card system-card" key={system.url || system.systemNo}>
+                  <h4 className="system-title-row">
+                    <span>{`System ${system.systemNo}: ${system.ip}`}</span>
+                    <span className="system-status down">down</span>
+                  </h4>
+                  <div className="metric-meta">Unable to fetch this system right now: {system.error || "Unknown error"}</div>
+                </div>
+              );
+            }
 
-          <div className="chart-card profiling-card">
-            <h4 className="metric-title-row">Memory (JVM)<span>{sysMetrics.memory.percent}%</span></h4>
-            <progress className={`metric-progress ${sysMetrics.memory.percent > 85 ? "metric-progress-danger" : "metric-progress-green"}`} value={sysMetrics.memory.percent} max="100" />
-            <div className="metric-meta">
-                 <div>Used: {sysMetrics.memory.usedStr}</div>
-                 <div>Max: {sysMetrics.memory.totalStr}</div>
-              </div>
-            </div>
+            return (
+              <div className="chart-card profiling-card system-card" key={system.url || system.systemNo}>
+                <h4 className="system-title-row">
+                  <span>{`System ${system.systemNo}: ${system.ip}`}</span>
+                  <span className="system-status up">live</span>
+                </h4>
 
-          <div className="chart-card profiling-card">
-            <h4 className="metric-title-row">Disk I/O (Solr Core)<span>{sysMetrics.disk.percent}%</span></h4>
-            <progress className={`metric-progress ${sysMetrics.disk.percent > 90 ? "metric-progress-danger" : "metric-progress-purple"}`} value={sysMetrics.disk.percent} max="100" />
-            <div className="metric-meta">
-                 <div>Index Size: {sysMetrics.disk.usedStr}</div>
-                 <div>Allocated Limit: {sysMetrics.disk.totalStr}</div>
+                <div className="metric-stack">
+                  <div>
+                    <h5 className="metric-title-row">CPU Usage<span>{system.cpu.percent}%</span></h5>
+                    <progress className={`metric-progress ${system.cpu.percent > 80 ? "metric-progress-danger" : "metric-progress-blue"}`} value={system.cpu.percent} max="100" />
+                    <div className="metric-meta">
+                      <div>Load Avg: {system.cpu.load}</div>
+                      <div>Cores: {system.cpu.cores}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h5 className="metric-title-row">Memory (JVM)<span>{system.memory.percent}%</span></h5>
+                    <progress className={`metric-progress ${system.memory.percent > 85 ? "metric-progress-danger" : "metric-progress-green"}`} value={system.memory.percent} max="100" />
+                    <div className="metric-meta">
+                      <div>Used: {system.memory.usedStr}</div>
+                      <div>Max: {system.memory.totalStr}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h5 className="metric-title-row">Disk I/O (Solr Core)<span>{system.disk.percent}%</span></h5>
+                    <progress className={`metric-progress ${system.disk.percent > 90 ? "metric-progress-danger" : "metric-progress-purple"}`} value={system.disk.percent} max="100" />
+                    <div className="metric-meta">
+                      <div>Index Size: {system.disk.usedStr}</div>
+                      <div>Allocated Limit: {system.disk.totalStr}</div>
+                    </div>
+                  </div>
+
+                  <div className="metric-meta system-extra-meta">
+                    <div>Node Uptime: {system.solr.upTimeText}</div>
+                    <div>Solr Version: {system.solr.version}</div>
+                    <div>Total Docs: {Number(system.solr.docs || 0).toLocaleString()}</div>
+                    <div>Collections: {system.solr.collections}</div>
+                    <div>Replicas: {system.solr.replicas}</div>
+                  </div>
+                </div>
               </div>
-            </div>
-         </div>
-         
-        <div className="chart-card wide solr-state-card">
-          <h4 className="solr-state-title">Solr Engine State</h4>
-          <div className="solr-state-grid">
-            <div>
-              <div className="solr-state-label">Version</div>
-              <div className="solr-state-value">{sysMetrics.solr.version}</div>
+            );
+          })}
+        </div>
+
+        {cluster && (
+          <div className="chart-card wide solr-state-card">
+            <h4 className="solr-state-title">Solr Cloud Cluster State</h4>
+            <div className="solr-state-grid">
+              <div>
+                <div className="solr-state-label">Version</div>
+                <div className="solr-state-value">{cluster.version}</div>
               </div>
               <div>
-              <div className="solr-state-label">Total Documents</div>
-              <div className="solr-state-value">{sysMetrics.solr.docs.toLocaleString()}</div>
+                <div className="solr-state-label">Total Documents</div>
+                <div className="solr-state-value">{Number(cluster.totalDocuments || 0).toLocaleString()}</div>
               </div>
               <div>
-              <div className="solr-state-label">Uptime</div>
-              <div className="solr-state-value">{sysMetrics.solr.upTimeText}</div>
+                <div className="solr-state-label">Max Uptime (Across Systems)</div>
+                <div className="solr-state-value">{cluster.uptimeText}</div>
               </div>
-           </div>
-         </div>
+              <div>
+                <div className="solr-state-label">Live Systems</div>
+                <div className="solr-state-value">{cluster.liveSystems}</div>
+              </div>
+              <div>
+                <div className="solr-state-label">Collections</div>
+                <div className="solr-state-value">{cluster.collections}</div>
+              </div>
+              <div>
+                <div className="solr-state-label">Replicas</div>
+                <div className="solr-state-value">{cluster.replicas}</div>
+              </div>
+            </div>
+          </div>
+        )}
        </div>
     );
   }

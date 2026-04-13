@@ -1,6 +1,7 @@
 import { buildSearchQuery } from "../utils/queryBuilder.js";
 import { searchSolr } from "../services/solrService.js";
 import { cacheGet, cacheSet, logSearchMetric } from "../utils/redisClient.js";
+import { SOLR_URL } from "../config/solr.js";
 
 /** ═══════════════════════════════════════════════════════════════════
  *  ── L1: In-Memory Cache (0ms latency) ─────────────────────────────
@@ -37,6 +38,30 @@ function l1Set(key, data) {
  *  The other 99 await the same in-flight Promise and share the result.
  *  ═══════════════════════════════════════════════════════════════════ */
 const inflightQueries = new Map();
+
+function normalizeIp(rawIp) {
+  if (!rawIp) return null;
+  const ip = String(rawIp);
+  if (ip.startsWith("::ffff:")) return ip.replace("::ffff:", "");
+  return ip;
+}
+
+function getBackendIp(req) {
+  return (
+    normalizeIp(req.socket?.localAddress) ||
+    normalizeIp(req.socket?.address?.().address) ||
+    normalizeIp(req.headers["x-forwarded-for"]?.split(",")?.[0]) ||
+    "unknown"
+  );
+}
+
+function getSolrIp() {
+  try {
+    return new URL(SOLR_URL).hostname;
+  } catch (_err) {
+    return "unknown";
+  }
+}
 
 async function singleFlightSolrQuery(cacheKey, queryParams) {
   if (inflightQueries.has(cacheKey)) {
@@ -82,6 +107,8 @@ async function singleFlightSolrQuery(cacheKey, queryParams) {
  *  ═══════════════════════════════════════════════════════════════════ */
 async function searchController(req, res, next) {
   const startTime = performance.now();  // Use high-precision timer (microsecond accuracy)
+  const backendIp = getBackendIp(req);
+  const solrIp = getSolrIp();
 
   try {
     const rawQuery = (req.query.q || "").trim();
@@ -115,7 +142,8 @@ async function searchController(req, res, next) {
         latency: totalLatency,
         results: memCached.total,
         source: "cache",
-        status: "ok"
+        status: "ok",
+        ip: backendIp,
       }).catch(() => {});
 
       return res.json({
@@ -139,7 +167,8 @@ async function searchController(req, res, next) {
         latency: totalLatency,
         results: redisCached.total,
         source: "cache",
-        status: "ok"
+        status: "ok",
+        ip: backendIp,
       }).catch(() => {});
 
       return res.json({
@@ -164,7 +193,8 @@ async function searchController(req, res, next) {
       latency: totalLatency,
       results: payload.total,
       source: "solr",
-      status: "ok"
+      status: "ok",
+      ip: solrIp,
     }).catch(() => {});
 
     return res.json({
@@ -182,7 +212,8 @@ async function searchController(req, res, next) {
         latency: Number((performance.now() - startTime).toFixed(3)),
         results: 0,
         source: "error",
-        status: "error"
+        status: "error",
+        ip: solrIp,
       }).catch(() => {});
     }
     next(error);

@@ -101,9 +101,52 @@ async function analyticsController(req, res) {
        heatmapRaw[hi][day]++;
     });
     
-    // Normalize heatmap
+    // Normalize heatmap using sqrt scaling so low traffic is still visible.
     const maxHeat = Math.max(...heatmapRaw.flat()) || 1;
-    const heatmapData = heatmapRaw.map(row => row.map(v => Math.round((v / maxHeat) * 100)));
+    const heatmapData = heatmapRaw.map((row) =>
+      row.map((v) => {
+        if (v <= 0) return 0;
+        return Math.max(8, Math.round((Math.sqrt(v) / Math.sqrt(maxHeat)) * 100));
+      })
+    );
+
+    // Last 5 weeks daily heatmap (Mon-Sun per week) to inspect previous weeks.
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const WEEKS = 5;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const nowDate = new Date(now);
+    const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate());
+    const dayOfWeek = (todayStart.getDay() + 6) % 7; // Mon=0 ... Sun=6
+    const currentMonday = new Date(todayStart.getTime() - dayOfWeek * DAY_MS);
+    const oldestMonday = new Date(currentMonday.getTime() - (WEEKS - 1) * 7 * DAY_MS);
+
+    const weeklyRaw = Array.from({ length: WEEKS }, () => Array(7).fill(0));
+
+    logs.forEach((l) => {
+      const ts = new Date(l.timestamp);
+      const dayStart = new Date(ts.getFullYear(), ts.getMonth(), ts.getDate());
+      if (dayStart < oldestMonday || dayStart > todayStart) return;
+
+      const diffDays = Math.floor((dayStart.getTime() - oldestMonday.getTime()) / DAY_MS);
+      if (diffDays < 0 || diffDays >= WEEKS * 7) return;
+
+      const weekIndex = Math.floor(diffDays / 7);
+      const weekDay = diffDays % 7; // Mon..Sun
+      weeklyRaw[weekIndex][weekDay] += 1;
+    });
+
+    const maxWeekly = Math.max(...weeklyRaw.flat()) || 1;
+    const weeklyData = weeklyRaw.map((row) =>
+      row.map((v) => {
+        if (v <= 0) return 0;
+        return Math.max(8, Math.round((Math.sqrt(v) / Math.sqrt(maxWeekly)) * 100));
+      })
+    );
+
+    const weekLabels = Array.from({ length: WEEKS }, (_, i) => {
+      const weekStart = new Date(oldestMonday.getTime() + i * 7 * DAY_MS);
+      return `${weekStart.getDate()} ${weekStart.toLocaleString("en-US", { month: "short" })}`;
+    });
 
     res.json({
       stats: {
@@ -123,6 +166,11 @@ async function analyticsController(req, res) {
       },
       topQueries,
       heatmapData,
+      weeklyHeatmap: {
+        weekLabels,
+        dayLabels: days,
+        data: weeklyData,
+      },
       logs: logs.slice(0, 50) // sending newest 50. Since it's LPUSH, 0 is newest.
     });
   } catch (error) {
