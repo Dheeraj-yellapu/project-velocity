@@ -103,6 +103,8 @@
 .search-container {
   max-width: 800px;
   margin: 0 auto;
+  position: relative;
+  z-index: 100;
 }
 
 .search-box {

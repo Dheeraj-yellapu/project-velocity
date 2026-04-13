@@ -1,14 +1,16 @@
-1) QPS and latency
+* Remaining work to be done in distributed fashion *
+
+1) QPS and latency further improvement
 2) Query suggestion improvement (Use llm to modify the query and suggest there itself)
 3) UI changes (Like user to admin direct without password??, new/oldest??)
 4) Dataset updation
 5) Unusual traffic to be blocked by user
-6) Admin, What exactly to put, Graph numbering in overview,settings?
+6) Admin, Display the graph values on cursor movement?
 7) Configuration of solr on which actually gives us the best results
 8) Exportable benchmark reports as CSV/PDF with embedded graphs, Chart.js
 9) ETL Dataset Pipleine Apache Airflow
-10) Performance Profiling CPU/Memory/Disk metrics during load tests Prometheus/Grafana
+10) Performance Profiling CPU/Memory/Disk metrics during load tests Prometheus/Grafana (a seperate section in the admin dashboard)
 11) 01:47:31	biden vs trump vs modi	100 ms	14,691	Miss	OK
-01:47:30	heaven	0 ms	75	Hit	OK
-01:47:20	heaven	204 ms	75	Miss	OK
-What is this issue here
+    01:47:30	heaven	0 ms	75	Hit	OK
+    01:47:20	heaven	204 ms	75	Miss	OK
+    What is this issue here (do we really need those 15k results or can save it by using getting on demand)

@@ -1,13 +1,77 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import axios from "axios";
 import { useSearch } from "../hooks/useSearch";
 import SearchBar from "../components/SearchBar";
+import SuggestionsDropdown from "../components/SuggestionsDropdown";
 import Filters from "../components/Filters";
 import ResultCard from "../components/ResultCard";
 
+const API_BASE = "http://localhost:4000";
+
 export default function Search() {
-  const { query, setQuery, filters, setFilters, results, loading, error, meta, suggestions, search, fetchSuggestions } = useSearch();
+  const { query, setQuery, filters, setFilters, results, loading, error, meta, search } = useSearch();
   const [hasSearched, setHasSearched] = useState(false);
   const [viewMode, setViewMode] = useState("list");
+  
+  // Debounced suggestions state
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceTimerRef = useRef(null);
+  const searchBarRef = useRef(null);
+
+  // ── Handle clicks outside dropdown ────────────────────────────────
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchBarRef.current && !searchBarRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // ── Fetch suggestions with debouncing ────────────────────────────
+  const fetchSuggestions = useCallback((q) => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+
+    if (!q.trim() || q.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setSuggestionsLoading(true);
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await axios.get(`${API_BASE}/api/suggest`, { params: { q } });
+        setSuggestions(res.data.suggestions || []);
+        setShowSuggestions(true);
+      } catch (err) {
+        console.error("Suggestions fetch error:", err);
+        setSuggestions([]);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(debounceTimerRef.current);
+  }, []);
+
+  const handleSearch = useCallback(() => {
+    if (!query.trim()) return;
+    setHasSearched(true);
+    setShowSuggestions(false);
+    search(query, filters);
+  }, [query, filters, search]);
+
+  const handleSuggestion = (s) => {
+    setQuery(s);
+    setShowSuggestions(false);
+    setHasSearched(true);
+    search(s, filters);
+  };
 
   // Re-search when filters change (only if we already searched)
   useEffect(() => {
@@ -17,29 +81,27 @@ export default function Search() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  const handleSearch = useCallback(() => {
-    if (!query.trim()) return;
-    setHasSearched(true);
-    search(query, filters);
-  }, [query, filters, search]);
-
-  const handleSuggestion = (s) => {
-    setQuery(s);
-    setHasSearched(true);
-    search(s, filters);
-  };
-
   return (
     <div className="search-page">
       <div className="search-hero">
-        <SearchBar
-          query={query}
-          onChange={(q) => { setQuery(q); fetchSuggestions(q); }}
-          onSearch={handleSearch}
-          suggestions={suggestions}
-          onSuggestionClick={handleSuggestion}
-          onClear={() => { setQuery(""); setHasSearched(false); }}
-        />
+        <div ref={searchBarRef}>
+          <SearchBar
+            query={query}
+            onChange={(q) => { setQuery(q); fetchSuggestions(q); }}
+            onSearch={handleSearch}
+            suggestions={suggestions}
+            onSuggestionClick={handleSuggestion}
+            onClear={() => { setQuery(""); setHasSearched(false); setShowSuggestions(false); }}
+          />
+          <SuggestionsDropdown
+            suggestions={suggestions}
+            query={query}
+            isOpen={showSuggestions}
+            isLoading={suggestionsLoading}
+            onSuggestionClick={handleSuggestion}
+            onClose={() => setShowSuggestions(false)}
+          />
+        </div>
       </div>
 
       {hasSearched && (

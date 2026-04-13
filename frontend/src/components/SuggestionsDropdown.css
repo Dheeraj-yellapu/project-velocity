@@ -1,0 +1,194 @@
+/* ══════════════════════════════════════════════════════════════════
+   Suggestions Dropdown — Google-like autocomplete UI
+   ══════════════════════════════════════════════════════════════════ */
+
+.suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  max-height: 480px;
+  background: #1a1f2e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 
+    0 4px 6px rgba(0, 0, 0, 0.07),
+    0 10px 13px -5px rgba(0, 0, 0, 0.1),
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 0 50px rgba(96, 165, 250, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 1000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: dropdownIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Loading State ───────────────────────────────────────────────── */
+.suggestions-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 20px;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(96, 165, 250, 0.2);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── List ────────────────────────────────────────────────────────── */
+.suggestions-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Smooth scrollbar styling */
+.suggestions-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.suggestions-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.suggestions-list::-webkit-scrollbar-thumb {
+  background: rgba(96, 165, 250, 0.2);
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.suggestions-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(96, 165, 250, 0.4);
+}
+
+/* ── Suggestion Item ─────────────────────────────────────────────── */
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #d1d5db;
+  user-select: none;
+  border-left: 3px solid transparent;
+}
+
+.suggestion-item:hover {
+  background: rgba(96, 165, 250, 0.1);
+  color: #f0f4f8;
+  border-left-color: #60a5fa;
+}
+
+.suggestion-item.selected {
+  background: rgba(96, 165, 250, 0.15);
+  color: #f0f4f8;
+  border-left-color: #60a5fa;
+}
+
+.suggestion-item.selected .suggestion-icon {
+  color: #60a5fa;
+}
+
+/* ── Icon (Search lens) ──────────────────────────────────────────── */
+.suggestion-icon {
+  flex-shrink: 0;
+  color: #6b7280;
+  transition: color 0.15s ease;
+}
+
+.suggestion-item:hover .suggestion-icon,
+.suggestion-item.selected .suggestion-icon {
+  color: #60a5fa;
+}
+
+/* ── Text (Suggestion content) ────────────────────────────────────── */
+.suggestion-text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+  min-width: 0; /* For text truncation */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-text .sug-highlight {
+  color: #9ca3af; /* Gray for non-matching part */
+}
+
+.suggestion-text .sug-match {
+  color: #f0f4f8; /* Bright for matching part */
+  font-weight: 600;
+}
+
+.suggestion-item.selected .suggestion-text .sug-match {
+  color: #60a5fa; /* Blue for selected item's match */
+}
+
+/* ── Arrow Icon (for visual indication) ──────────────────────────── */
+.suggestion-arrow {
+  flex-shrink: 0;
+  color: #4b5563;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.15s ease;
+}
+
+.suggestion-item:hover .suggestion-arrow,
+.suggestion-item.selected .suggestion-arrow {
+  opacity: 1;
+  color: #60a5fa;
+  transform: translateX(0);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .suggestions-dropdown {
+    max-height: 360px;
+    border-radius: 8px;
+    box-shadow: 
+      0 4px 6px rgba(0, 0, 0, 0.1),
+      0 10px 13px -5px rgba(0, 0, 0, 0.15);
+  }
+
+  .suggestion-item {
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+
+  .suggestion-icon,
+  .suggestion-arrow {
+    width: 14px;
+    height: 14px;
+  }
+}

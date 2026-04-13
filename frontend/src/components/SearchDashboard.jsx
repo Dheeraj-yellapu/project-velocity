@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
+import SuggestionsDropdown from "./SuggestionsDropdown";
 import "./SearchDashboard.css";
 
 const API_BASE = "http://localhost:4000";
@@ -10,6 +11,11 @@ export default function SearchDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Suggestions state
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Performance metrics
   const [metrics, setMetrics] = useState({
@@ -24,10 +30,79 @@ export default function SearchDashboard() {
   const [benchLoading, setBenchLoading] = useState(false);
 
   const inputRef = useRef(null);
+  const debounceTimerRef = useRef(null);
+  const searchContainerRef = useRef(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // ── Handle clicks outside dropdown ────────────────────────────────
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // ── Fetch suggestions with debouncing ────────────────────────────
+  const fetchSuggestions = useCallback(async (prefix) => {
+    if (prefix.length < 2) {
+      setSuggestions([]);
+      setSuggestionsLoading(false);
+      return;
+    }
+
+    setSuggestionsLoading(true);
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/suggest`, {
+        params: { q: prefix },
+        timeout: 5000,
+      });
+      setSuggestions(data.suggestions || []);
+    } catch (err) {
+      console.error("Suggestion error:", err.message);
+      setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
+  // ── Debounced query input handler ────────────────────────────────
+  const handleQueryChange = (newQuery) => {
+    setQuery(newQuery);
+    setShowSuggestions(true);
+
+    // Clear existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Set new timer (300ms debounce)
+    debounceTimerRef.current = setTimeout(() => {
+      if (newQuery.trim()) {
+        fetchSuggestions(newQuery.trim());
+      } else {
+        setSuggestions([]);
+        setSuggestionsLoading(false);
+      }
+    }, 300);
+  };
+
+  // ── Handle suggestion click ──────────────────────────────────────
+  const handleSuggestionClick = (suggestion) => {
+    setQuery(suggestion);
+    setShowSuggestions(false);
+    setSuggestions([]);
+    // Trigger search after setting query
+    setTimeout(() => {
+      handleSearch(suggestion);
+    }, 0);
+  };
 
   // ── Search handler ────────────────────────────────────────────────
   const handleSearch = useCallback(
@@ -38,6 +113,7 @@ export default function SearchDashboard() {
       setLoading(true);
       setError(null);
       setHasSearched(true);
+      setShowSuggestions(false);
 
       try {
         const { data } = await axios.get(`${API_BASE}/api/search`, {
@@ -68,7 +144,9 @@ export default function SearchDashboard() {
   );
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") handleSearch();
+    if (e.key === "Enter") {
+      handleSearch();
+    }
   };
 
   // ── Benchmark handler ─────────────────────────────────────────────
@@ -159,7 +237,7 @@ export default function SearchDashboard() {
 
       {/* ── Search Bar ──────────────────────────────────────────────── */}
       <div className="search-section">
-        <div className="search-container">
+        <div className="search-container" ref={searchContainerRef}>
           <div className="search-box">
             <svg
               className="search-lens"
@@ -188,8 +266,9 @@ export default function SearchDashboard() {
               className="search-field"
               placeholder="Search news articles — try 'politics', 'economy', 'technology'..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => handleQueryChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              onFocus={() => query.length >= 2 && setShowSuggestions(true)}
             />
             {query && (
               <button
@@ -198,6 +277,8 @@ export default function SearchDashboard() {
                   setQuery("");
                   setResults([]);
                   setHasSearched(false);
+                  setShowSuggestions(false);
+                  setSuggestions([]);
                   setMetrics({
                     total_latency_ms: null,
                     qtime_ms: null,
@@ -214,6 +295,16 @@ export default function SearchDashboard() {
               Search
             </button>
           </div>
+
+          {/* ── Suggestions Dropdown ────────────────────────────────── */}
+          <SuggestionsDropdown
+            suggestions={suggestions}
+            query={query}
+            isOpen={showSuggestions && (suggestions.length > 0 || suggestionsLoading)}
+            isLoading={suggestionsLoading}
+            onSuggestionClick={handleSuggestionClick}
+            onClose={() => setShowSuggestions(false)}
+          />
         </div>
       </div>
 
