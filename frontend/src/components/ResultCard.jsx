@@ -11,16 +11,16 @@ export default function ResultCard({ result }) {
     <article className="result-card">
       <div className="result-meta">
         <div className="source-badge">
-          <span className="source-icon">{SOURCE_ICONS[sourceName]?.[0] || sourceName[0]}</span>
-          <span className="source-name">{sourceName}</span>
+          <span className="source-icon">{SOURCE_ICONS[sourceName]?.[0] || sourceName[0] || '?'}</span>
+          <span className="source-name">{sourceName || 'Unknown Source'}</span>
         </div>
         {result.type && <span className="type-tag">{result.type}</span>}
       </div>
       <h3 className="result-title">
         <a href={result.url} target="_blank" rel="noopener noreferrer">{result.title}</a>
       </h3>
-      <div className="result-date">{helpers.formatDate(result.pub)}</div>
-      <p className="result-sum">{result.sum}</p>
+      <div className="result-date">{helpers.formatDate(result.pub || result.published_at)}</div>
+      <p className="result-sum">{result.sum || result.summary}</p>
       {expanded && <p className="result-body">{result.body}</p>}
       <a href={result.url} className="result-url" target="_blank" rel="noopener noreferrer">{result.url}</a>
       {result.body && (

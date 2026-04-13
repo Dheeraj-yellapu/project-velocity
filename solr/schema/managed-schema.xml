@@ -127,7 +127,6 @@
     <field name="content" type="text_general" indexed="true" stored="false" />
     <field name="body" type="text_general" indexed="true" stored="true" />
     <field name="sum" type="text_general" indexed="true" stored="true" />
-    <field name="summary" type="text_general" indexed="true" stored="true" />
     <field name="category" type="string" indexed="true" stored="true" docValues="true" />
     <field name="source" type="string" indexed="true" stored="true" docValues="true" />
     <field name="type" type="string" indexed="true" stored="true" docValues="true" />

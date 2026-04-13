@@ -122,25 +122,6 @@
 
     <field name="_text_" type="text_general" indexed="true" stored="false" multiValued="true"/>
 
-    <!-- ── Velocity Custom Fields ─────────────────────────────────── -->
-    <field name="title" type="text_general" indexed="true" stored="true" termVectors="true" />
-    <field name="content" type="text_general" indexed="true" stored="false" />
-    <field name="body" type="text_general" indexed="true" stored="true" />
-    <field name="sum" type="text_general" indexed="true" stored="true" />
-    <field name="summary" type="text_general" indexed="true" stored="true" />
-    <field name="category" type="string" indexed="true" stored="true" docValues="true" />
-    <field name="source" type="string" indexed="true" stored="true" docValues="true" />
-    <field name="type" type="string" indexed="true" stored="true" docValues="true" />
-    <field name="lang" type="string" indexed="true" stored="true" docValues="true" />
-    <field name="published_at" type="pdate" indexed="true" stored="true" docValues="true" />
-    <field name="pub" type="pdate" indexed="true" stored="true" docValues="true" />
-    <field name="url" type="string" indexed="false" stored="true" />
-    <field name="text_combined" type="text_general" indexed="true" stored="false" termVectors="true" />
-
-    <copyField source="title" dest="text_combined" />
-    <copyField source="body" dest="text_combined" />
-    <!-- ──────────────────────────────────────────────────────────── -->
-
     <!-- This can be enabled, in case the client does not know what fields may be searched. It isn't enabled by default
          because it's very expensive to index everything twice. -->
     <!-- <copyField source="*" dest="_text_"/> -->
