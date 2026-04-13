@@ -5,7 +5,7 @@ import os from "os";
 async function metricsController(req, res) {
   try {
     // 1. Fetch Solr System Info
-    const solrSysRes = await axios.get(`${SOLR_URL}/admin/info/system?wt=json`, { timeout: 3000 });
+    const solrSysRes = await axios.get(`${SOLR_URL}/admin/info/system?wt=json`, { timeout: 8000 });
     const sysData = solrSysRes.data;
 
     // 2. Parse Memory
@@ -23,7 +23,7 @@ async function metricsController(req, res) {
     const cpuPercent = Math.min(((cpuLoad / cpuCores) * 100).toFixed(1), 100);
 
     // 4. Fetch Solr Core metrics (for Disk/Docs)
-    const solrCoreRes = await axios.get(`${SOLR_URL}/admin/cores?action=STATUS&core=${SOLR_COLLECTION}&wt=json`, { timeout: 3000 });
+    const solrCoreRes = await axios.get(`${SOLR_URL}/admin/cores?action=STATUS&core=${SOLR_COLLECTION}&wt=json`, { timeout: 8000 });
     const coreStatus = solrCoreRes.data.status?.[SOLR_COLLECTION] || {};
     
     // Approximate disk size based on index size string like "1.2 GB"

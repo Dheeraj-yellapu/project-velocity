@@ -471,6 +471,8 @@ export default function AdminDashboard({ activeSection }) {
 
   if (activeSection === "profiling") {
     if (!sysMetrics) return <div style={{padding:40, textAlign:'center'}}>Loading Profiling Metrics...</div>;
+    if (sysMetrics.error) return <div style={{padding:40, textAlign:'center', color:'#ef4444'}}>Failed to load profiling data: {sysMetrics.details}</div>;
+    
     return (
        <div className="admin-overview">
          <div className="chart-header" style={{marginBottom: 20}}>
