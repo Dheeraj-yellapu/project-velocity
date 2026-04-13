@@ -81,7 +81,7 @@ async function singleFlightSolrQuery(cacheKey, queryParams) {
  *  + Single-Flight coalescing prevents stampede at L3
  *  ═══════════════════════════════════════════════════════════════════ */
 async function searchController(req, res, next) {
-  const startTime = Date.now();
+  const startTime = performance.now();  // Use high-precision timer (microsecond accuracy)
 
   try {
     const rawQuery = (req.query.q || "").trim();
@@ -107,10 +107,10 @@ async function searchController(req, res, next) {
     // ── L1: In-Memory Cache (0ms) ────────────────────────────────────
     const memCached = l1Get(cacheKey);
     if (memCached) {
-      const totalLatency = Date.now() - startTime;
+      const totalLatency = Number((performance.now() - startTime).toFixed(3));
 
       logSearchMetric({
-        timestamp: startTime,
+        timestamp: Date.now(),  // Use regular timestamp for logging
         query: rawQuery,
         latency: totalLatency,
         results: memCached.total,
@@ -128,13 +128,13 @@ async function searchController(req, res, next) {
     // ── L2: Redis Cache (1-5ms) ──────────────────────────────────────
     const redisCached = await cacheGet(cacheKey);
     if (redisCached) {
-      const totalLatency = Date.now() - startTime;
+      const totalLatency = Number((performance.now() - startTime).toFixed(3));
 
       // Promote to L1 for next time
       l1Set(cacheKey, redisCached);
 
       logSearchMetric({
-        timestamp: startTime,
+        timestamp: Date.now(),  // Use regular timestamp for logging
         query: rawQuery,
         latency: totalLatency,
         results: redisCached.total,
@@ -153,13 +153,13 @@ async function searchController(req, res, next) {
     const queryParams = buildSearchQuery(req.query);
     const { payload, qtime } = await singleFlightSolrQuery(cacheKey, queryParams);
 
-    const totalLatency = Date.now() - startTime;
+    const totalLatency = Number((performance.now() - startTime).toFixed(3));
     console.log(
       `[Search] SOLR QUERY  q="${rawQuery}"  QTime=${qtime}ms  total=${totalLatency}ms  docs=${payload.total}`
     );
 
     logSearchMetric({
-      timestamp: startTime,
+      timestamp: Date.now(),  // Use regular timestamp for logging
       query: rawQuery,
       latency: totalLatency,
       results: payload.total,
@@ -177,9 +177,9 @@ async function searchController(req, res, next) {
     const rawQuery = (req.query.q || "").trim();
     if (rawQuery) {
       logSearchMetric({
-        timestamp: startTime,
+        timestamp: Date.now(),
         query: rawQuery,
-        latency: Date.now() - startTime,
+        latency: Number((performance.now() - startTime).toFixed(3)),
         results: 0,
         source: "error",
         status: "error"
