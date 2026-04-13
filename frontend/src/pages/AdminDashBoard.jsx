@@ -151,6 +151,33 @@ export default function AdminDashboard({ activeSection }) {
   }
 
   const { stats, charts, topQueries, heatmapData, logs } = analytics;
+  const qpsSeries = charts?.qpsData ?? [];
+  const qpsPointCount = qpsSeries.length || 1;
+  const rangeMinutesByKey = { "1h": 60, "6h": 360, "24h": 1440 };
+  const totalRangeMinutes = rangeMinutesByKey[qpsRange] ?? 60;
+  const bucketMinutes = totalRangeMinutes / qpsPointCount;
+  const bucketSeconds = bucketMinutes * 60;
+  const qpsMaxData = qpsSeries.length > 0 ? Math.max(...qpsSeries) : 0;
+  const qpsMinData = qpsSeries.length > 0 ? Math.min(...qpsSeries) : 0;
+  const qpsScaleMax = qpsMaxData > 0 ? Number((qpsMaxData * 1.1).toFixed(4)) : 1;
+  const qpsScaleMid = qpsScaleMax / 2;
+  const formatQpsValue = (value) => {
+    if (value >= 100) return value.toFixed(0);
+    if (value >= 10) return value.toFixed(1);
+    if (value >= 1) return value.toFixed(2);
+    if (value >= 0.1) return value.toFixed(3);
+    return value.toFixed(4);
+  };
+  const qpsLabels = qpsSeries.map((_, i) => {
+    const minutesAgo = Math.round((qpsPointCount - 1 - i) * bucketMinutes);
+    return minutesAgo === 0 ? "Now" : `${minutesAgo}m ago`;
+  });
+  const systemConfig = {
+    l1CacheMaxEntries: 500,
+    l1TtlSec: 30.0,
+    l2CacheTtlSec: 300.0,
+    defaultSolrRows: 10,
+  };
 
   if (activeSection === "overview") {
     return (
@@ -176,7 +203,7 @@ export default function AdminDashboard({ activeSection }) {
               <span className="chart-title">QPS Over Time</span>
               <div className="qps-header-controls">
                 <div className="qps-minmax-text">
-                      Max: {Math.max(...charts.qpsData).toFixed(1)} QPS | Min: {Math.min(...charts.qpsData).toFixed(1)} QPS
+                      Max: {formatQpsValue(qpsMaxData)} QPS | Min: {formatQpsValue(qpsMinData)} QPS
                   </div>
                   <select className="chart-select" value={qpsRange} onChange={e => setQpsRange(e.target.value)}>
                     <option value="1h">Last 1 hour</option>
@@ -187,17 +214,16 @@ export default function AdminDashboard({ activeSection }) {
             </div>
             <div className="chart-axes">
               <div className="y-labels">
-                {/* Dynamically adjust y labels? Keeping static layout for simplicity */}
-                {[Math.max(...charts.qpsData).toFixed(1), "", ((Math.max(...charts.qpsData) + Math.min(...charts.qpsData))/2).toFixed(1), "", Math.min(...charts.qpsData).toFixed(1)].map((l, i) => <span key={i}>{l}</span>)}
+                {[formatQpsValue(qpsScaleMax), "", formatQpsValue(qpsScaleMid), "", "0"].map((l, i) => <span key={i}>{l}</span>)}
               </div>
               <div className="chart-area qps-chart-area">
                 <Line 
                    data={{
-                     labels: charts.qpsData.map((_, i) => `${i*4}m ago`),
+                     labels: qpsLabels,
                      datasets: [
                        {
                          label: 'Live QPS',
-                         data: charts.qpsData,
+                         data: qpsSeries,
                          borderColor: '#3B82F6',
                          backgroundColor: 'rgba(59, 130, 246, 0.1)',
                          fill: true,
@@ -210,12 +236,23 @@ export default function AdminDashboard({ activeSection }) {
                      interaction: { mode: 'index', intersect: false },
                      plugins: { 
                        legend: { display: false }, 
-                       tooltip: { enabled: true, mode: 'index', intersect: false }
+                        tooltip: {
+                          enabled: true,
+                          mode: 'index',
+                          intersect: false,
+                          callbacks: {
+                            label: (ctx) => {
+                              const qps = Number(ctx.parsed.y || 0);
+                              const approxRequests = Math.round(qps * bucketSeconds);
+                              return `QPS: ${formatQpsValue(qps)} (~${approxRequests} req/${Math.round(bucketMinutes)}m bucket)`;
+                            }
+                          }
+                        }
                      }, 
                      elements: { point: { radius: 2, hoverRadius: 5 } },
                      scales: {
                        x: { display: false },
-                       y: { display: false }
+                       y: { display: false, min: 0, max: qpsScaleMax }
                      }
                    }} 
                 />
@@ -723,19 +760,19 @@ export default function AdminDashboard({ activeSection }) {
              <div className="config-grid">
                <div className="config-item">
                  <div className="config-item-label">L1 Cache Max Entries</div>
-                 <div className="config-item-value">500 items</div>
+                 <div className="config-item-value">{systemConfig.l1CacheMaxEntries} items</div>
                </div>
                <div className="config-item">
                  <div className="config-item-label">L1 TTL</div>
-                 <div className="config-item-value">30.0 sec</div>
+                 <div className="config-item-value">{systemConfig.l1TtlSec.toFixed(1)} sec</div>
                </div>
                <div className="config-item">
                  <div className="config-item-label">L2 Cache TTL</div>
-                 <div className="config-item-value">300.0 sec</div>
+                 <div className="config-item-value">{systemConfig.l2CacheTtlSec.toFixed(1)} sec</div>
                </div>
                <div className="config-item">
                  <div className="config-item-label">Default Solr Rows</div>
-                 <div className="config-item-value">10 results</div>
+                 <div className="config-item-value">{systemConfig.defaultSolrRows} results</div>
                </div>
              </div>
           </div>
