@@ -62,7 +62,11 @@ function buildSearchQuery({
   };
 
   // ── Sorting ───────────────────────────────────────────────────────
-  if (sortParam === "date") {
+  if (sortParam === "newest") {
+    params.sort = "published_at desc";
+  } else if (sortParam === "oldest") {
+    params.sort = "published_at asc";
+  } else if (sortParam === "date") {
     params.sort = "published_at desc";
   } else if (sortParam === "date_asc") {
     params.sort = "published_at asc";
