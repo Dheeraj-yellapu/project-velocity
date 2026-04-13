@@ -10,7 +10,8 @@ export default function App() {
   return (
     <Routes>
       {/* ── Public ────────────────────────────────────────────────── */}
-      <Route path="/" element={<Login />} />
+      <Route path="/" element={<Navigate to="/user" replace />} />
+      <Route path="/login" element={<Login />} />
 
       {/* ── User routes ───────────────────────────────────────────── */}
       <Route

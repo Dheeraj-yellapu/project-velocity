@@ -8,6 +8,7 @@ const ADMIN_SECTIONS = [
   { id: "logs", icon: "≡", label: "Logs" },
   { id: "heatmaps", icon: "⊞", label: "Heatmaps" },
   { id: "performance", icon: "⚡", label: "Performance" },
+  { id: "profiling", icon: "📊", label: "Profiling" },
   { id: "settings", icon: "⚙", label: "Settings" },
 ];
 

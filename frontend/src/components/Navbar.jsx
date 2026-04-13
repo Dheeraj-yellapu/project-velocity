@@ -36,12 +36,21 @@ export default function Navbar({ mode, currentPage }) {
       )}
 
       <div className="navbar-actions">
-        <button className="admin-btn" onClick={() => navigate(mode === "admin" ? "/user" : "/admin")}>
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" style={{marginRight: 6}}>
-            <path d="M7 7a3 3 0 100-6 3 3 0 000 6zM2 12c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
-          </svg>
-          {mode === "admin" ? "Switch to Search" : "Admin"}
-        </button>
+        {mode === "admin" ? (
+           <button className="admin-btn" onClick={() => navigate("/user")}>
+             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" style={{marginRight: 6}}>
+               <path d="M7 7a3 3 0 100-6 3 3 0 000 6zM2 12c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
+             </svg>
+             Switch to Search
+           </button>
+        ) : (
+           <button className="admin-btn" onClick={() => navigate("/login")}>
+             <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" style={{marginRight: 6}}>
+               <path d="M7 7a3 3 0 100-6 3 3 0 000 6zM2 12c0-2.76 2.24-5 5-5s5 2.24 5 5"/>
+             </svg>
+             Admin
+           </button>
+        )}
       </div>
     </nav>
   );
