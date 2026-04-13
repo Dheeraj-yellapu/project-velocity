@@ -63,6 +63,32 @@ function getSolrIp() {
   }
 }
 
+function extractSolrNodeIps(solrResponse) {
+  const shardInfo = solrResponse?.["shards.info"] || {};
+  const addresses = Object.values(shardInfo)
+    .map((item) => item?.shardAddress)
+    .filter(Boolean);
+
+  const parsedHosts = addresses
+    .map((address) => {
+      try {
+        const asUrl = address.startsWith("http") ? address : `http://${address}`;
+        return new URL(asUrl).hostname;
+      } catch (_err) {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  if (parsedHosts.length > 0) return [...new Set(parsedHosts)];
+  return [getSolrIp()];
+}
+
+function nodeIpsToText(nodeIps) {
+  if (!Array.isArray(nodeIps) || nodeIps.length === 0) return "unknown";
+  return [...new Set(nodeIps)].join(", ");
+}
+
 async function singleFlightSolrQuery(cacheKey, queryParams) {
   if (inflightQueries.has(cacheKey)) {
     return inflightQueries.get(cacheKey);
@@ -74,11 +100,13 @@ async function singleFlightSolrQuery(cacheKey, queryParams) {
       const qtime = solrResponse.responseHeader?.QTime ?? null;
       const numFound = solrResponse.response?.numFound ?? 0;
       const docs = solrResponse.response?.docs ?? [];
+      const solrNodeIps = extractSolrNodeIps(solrResponse);
 
       const payload = {
         results: docs,
         total: numFound,
         qtime_ms: qtime,
+        solrNodeIps,
       };
 
       // Populate L1 + L2 caches
@@ -107,7 +135,6 @@ async function singleFlightSolrQuery(cacheKey, queryParams) {
  *  ═══════════════════════════════════════════════════════════════════ */
 async function searchController(req, res, next) {
   const startTime = performance.now();  // Use high-precision timer (microsecond accuracy)
-  const backendIp = getBackendIp(req);
   const solrIp = getSolrIp();
 
   try {
@@ -135,6 +162,7 @@ async function searchController(req, res, next) {
     const memCached = l1Get(cacheKey);
     if (memCached) {
       const totalLatency = Number((performance.now() - startTime).toFixed(3));
+      const cacheNodeIp = nodeIpsToText(memCached.solrNodeIps?.length ? memCached.solrNodeIps : [solrIp]);
 
       logSearchMetric({
         timestamp: Date.now(),  // Use regular timestamp for logging
@@ -143,7 +171,7 @@ async function searchController(req, res, next) {
         results: memCached.total,
         source: "cache",
         status: "ok",
-        ip: backendIp,
+        ip: cacheNodeIp,
       }).catch(() => {});
 
       return res.json({
@@ -157,6 +185,7 @@ async function searchController(req, res, next) {
     const redisCached = await cacheGet(cacheKey);
     if (redisCached) {
       const totalLatency = Number((performance.now() - startTime).toFixed(3));
+      const cacheNodeIp = nodeIpsToText(redisCached.solrNodeIps?.length ? redisCached.solrNodeIps : [solrIp]);
 
       // Promote to L1 for next time
       l1Set(cacheKey, redisCached);
@@ -168,7 +197,7 @@ async function searchController(req, res, next) {
         results: redisCached.total,
         source: "cache",
         status: "ok",
-        ip: backendIp,
+        ip: cacheNodeIp,
       }).catch(() => {});
 
       return res.json({
@@ -180,7 +209,9 @@ async function searchController(req, res, next) {
 
     // ── L3: Solr (coalesced — only 1 flight per unique query) ────────
     const queryParams = buildSearchQuery(req.query);
+    queryParams["shards.info"] = "true";
     const { payload, qtime } = await singleFlightSolrQuery(cacheKey, queryParams);
+    const solrNodeIp = nodeIpsToText(payload.solrNodeIps);
 
     const totalLatency = Number((performance.now() - startTime).toFixed(3));
     console.log(
@@ -194,7 +225,7 @@ async function searchController(req, res, next) {
       results: payload.total,
       source: "solr",
       status: "ok",
-      ip: solrIp,
+      ip: solrNodeIp,
     }).catch(() => {});
 
     return res.json({
