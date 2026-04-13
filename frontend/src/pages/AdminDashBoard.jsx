@@ -63,7 +63,6 @@ export default function AdminDashboard({ activeSection }) {
     fetchAnalyticsData();
     fetchMetrics();
     const interval = setInterval(() => {
-      if (activeSection !== "profiling" && activeSection !== "overview") return;
       fetchAnalyticsData();
       if (activeSection === "profiling") fetchMetrics();
     }, 3000);
@@ -150,7 +149,19 @@ export default function AdminDashboard({ activeSection }) {
     return <div className="admin-overview admin-loading">Loading Live Analytics...</div>;
   }
 
-  const { stats, charts, topQueries, heatmapData, logs } = analytics;
+  const {
+    stats,
+    charts,
+    topQueries,
+    heatmapData = [
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+    ],
+    weeklyHeatmap,
+    logs,
+  } = analytics;
   const qpsSeries = charts?.qpsData ?? [];
   const qpsPointCount = qpsSeries.length || 1;
   const rangeMinutesByKey = { "1h": 60, "6h": 360, "24h": 1440 };
