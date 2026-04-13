@@ -346,9 +346,6 @@ export default function AdminDashboard({ activeSection }) {
                 <tr key={i}>
                   <td className="mono">{new Date(q.timestamp).toLocaleTimeString()}</td>
                   <td className="q-cell">{q.query}</td>
-<<<<<<< Updated upstream
-                  <td><span className="slow-latency">{q.latency} ms</span></td>
-=======
                   <td><span style={{color: 'rgb(220, 38, 38)', fontWeight: 'bold'}}>{typeof q.latency === 'number' ? q.latency.toFixed(2) : q.latency} ms</span></td>
 >>>>>>> Stashed changes
                   <td>{q.source === "cache" ? "Hit" : "Miss (Solr)"}</td>
