@@ -7,27 +7,9 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, BarElement, Filler);
 
-function Sparkline({ data, color = "#3B82F6", height = 60 }) {
-  if (!data || data.length === 0) return null;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const w = 300, h = height;
-  const pts = data.map((v, i) => `${(i / (data.length - 1 || 1)) * w},${h - ((v - min) / range) * (h - 10) - 5}`).join(" ");
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height }} preserveAspectRatio="none">
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round"/>
-      <polyline points={`0,${h} ${pts} ${w},${h}`} fill={color} fillOpacity="0.08" strokeWidth="0"/>
-    </svg>
-  );
-}
-
 function HeatmapCell({ value }) {
-  const intensity = value / 100;
-  const r = Math.round(30 + intensity * 200);
-  const g = Math.round(80 - intensity * 60);
-  const b = Math.round(180 - intensity * 150);
-  return <div className="heatmap-cell" style={{ background: `rgb(${r},${g},${b})`, opacity: 0.3 + intensity * 0.7 }} title={`${value}%`} />;
+  const bucket = Math.max(0, Math.min(9, Math.floor(value / 10)));
+  return <div className={`heatmap-cell heatmap-cell-${bucket}`} title={`${value}%`} />;
 }
 
 export default function AdminDashboard({ activeSection }) {
@@ -36,40 +18,136 @@ export default function AdminDashboard({ activeSection }) {
   const [benchmarkData, setBenchmarkData] = useState(null);
   const [runningBenchmark, setRunningBenchmark] = useState(false);
   const [sysMetrics, setSysMetrics] = useState(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswordEditor, setShowPasswordEditor] = useState(false);
+  const [passwordChangedAt, setPasswordChangedAt] = useState(null);
+  const [passwordAgeNow, setPasswordAgeNow] = useState(Date.now());
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSuccess, setSettingsSuccess] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [clearingLogs, setClearingLogs] = useState(false);
   const adminSettingsRef = useRef(null);
   const reportRef = useRef(null);
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        const res = await fetch(`/api/analytics?range=${qpsRange}`);
-        const data = await res.json();
-        setAnalytics(data);
-      } catch (err) {
-        console.error("Failed to load analytics", err);
-      }
-    };
-    
-    const fetchMetrics = async () => {
-      try {
-        const res = await fetch(`/api/metrics`);
-        const data = await res.json();
-        setSysMetrics(data);
-      } catch(err) {}
-    };
+  const fetchAnalyticsData = async () => {
+    try {
+      const res = await fetch(`/api/analytics?range=${qpsRange}`);
+      const data = await res.json();
+      setAnalytics(data);
+    } catch (err) {
+      console.error("Failed to load analytics", err);
+    }
+  };
 
-    fetchAnalytics();
+  const fetchMetrics = async () => {
+    try {
+      const res = await fetch(`/api/metrics`);
+      const data = await res.json();
+      setSysMetrics(data);
+    } catch (_err) {}
+  };
+
+  const fetchPasswordMeta = async () => {
+    try {
+      const res = await fetch("/api/admin/settings/password-meta");
+      const payload = await res.json().catch(() => ({}));
+      if (res.ok && payload.changedAt) {
+        setPasswordChangedAt(Number(payload.changedAt));
+      }
+    } catch (_err) {}
+  };
+
+  useEffect(() => {
+    fetchAnalyticsData();
     fetchMetrics();
     const interval = setInterval(() => {
       if (activeSection !== "profiling" && activeSection !== "overview") return;
-      fetchAnalytics();
+      fetchAnalyticsData();
       if (activeSection === "profiling") fetchMetrics();
     }, 3000);
     return () => clearInterval(interval);
   }, [qpsRange, activeSection]);
 
+  useEffect(() => {
+    if (activeSection !== "settings") return;
+    fetchPasswordMeta();
+    const timer = setInterval(() => setPasswordAgeNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, [activeSection]);
+
+  const getRelativePasswordAge = () => {
+    if (!passwordChangedAt) return "just now";
+    const diffMs = Math.max(0, passwordAgeNow - passwordChangedAt);
+    const sec = Math.floor(diffMs / 1000);
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.floor(hr / 24);
+    return `${day}d ago`;
+  };
+
+  const handleChangePassword = async () => {
+    setSettingsError("");
+    setSettingsSuccess("");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setSettingsError("Please fill all password fields.");
+      return;
+    }
+
+    setUpdatingPassword(true);
+    try {
+      const res = await fetch("/api/admin/settings/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSettingsError(payload.error || "Failed to update password.");
+      } else {
+        setSettingsSuccess(payload.message || "Password updated successfully.");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setShowPasswordEditor(false);
+        setPasswordAgeNow(Date.now());
+        await fetchPasswordMeta();
+      }
+    } catch (_err) {
+      setSettingsError("Unable to update password right now.");
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    setSettingsError("");
+    setSettingsSuccess("");
+    setClearingLogs(true);
+    try {
+      const res = await fetch("/api/admin/settings/clear-logs", { method: "POST" });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSettingsError(payload.error || "Failed to clear logs.");
+      } else {
+        setSettingsSuccess(payload.message || "All logs have been cleared.");
+        await fetchAnalyticsData();
+      }
+    } catch (_err) {
+      setSettingsError("Unable to clear logs right now.");
+    } finally {
+      setClearingLogs(false);
+    }
+  };
+
   if (!analytics) {
-    return <div className="admin-overview" style={{ padding: 40, textAlign: 'center', opacity: 0.7 }}>Loading Live Analytics...</div>;
+    return <div className="admin-overview admin-loading">Loading Live Analytics...</div>;
   }
 
   const { stats, charts, topQueries, heatmapData, logs } = analytics;
@@ -96,8 +174,8 @@ export default function AdminDashboard({ activeSection }) {
           <div className="chart-card wide">
             <div className="chart-header">
               <span className="chart-title">QPS Over Time</span>
-              <div style={{ marginLeft: "auto", display: "flex", gap: "10px", alignItems: "center" }}>
-                  <div style={{ fontSize: "14px", fontWeight: "bold", color: "#3B82F6" }}>
+              <div className="qps-header-controls">
+                <div className="qps-minmax-text">
                       Max: {Math.max(...charts.qpsData).toFixed(1)} QPS | Min: {Math.min(...charts.qpsData).toFixed(1)} QPS
                   </div>
                   <select className="chart-select" value={qpsRange} onChange={e => setQpsRange(e.target.value)}>
@@ -112,7 +190,7 @@ export default function AdminDashboard({ activeSection }) {
                 {/* Dynamically adjust y labels? Keeping static layout for simplicity */}
                 {[Math.max(...charts.qpsData).toFixed(1), "", ((Math.max(...charts.qpsData) + Math.min(...charts.qpsData))/2).toFixed(1), "", Math.min(...charts.qpsData).toFixed(1)].map((l, i) => <span key={i}>{l}</span>)}
               </div>
-              <div className="chart-area" style={{height: "140px", position: "relative", width: "100%"}}>
+              <div className="chart-area qps-chart-area">
                 <Line 
                    data={{
                      labels: charts.qpsData.map((_, i) => `${i*4}m ago`),
@@ -161,7 +239,7 @@ export default function AdminDashboard({ activeSection }) {
                     <td>{q.count.toLocaleString()}</td>
                     <td>{q.lat} ms</td>
                   </tr>
-                )) : <tr><td colSpan="3" style={{textAlign:"center", padding:20, opacity:0.5}}>No queries yet</td></tr>}
+                )) : <tr><td colSpan="3" className="table-empty">No queries yet</td></tr>}
               </tbody>
             </table>
           </div>
@@ -202,17 +280,17 @@ export default function AdminDashboard({ activeSection }) {
         <div className="stat-grid">
           <div className="stat-card">
             <div className="stat-label">Fast Queries (&lt;50ms)</div>
-            <div className="stat-value" style={{color: 'rgb(22, 163, 74)'}}>{fastPct}%</div>
+            <div className="stat-value stat-value-fast">{fastPct}%</div>
             <div className="stat-delta">{fast} queries</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Medium Queries (&lt;200ms)</div>
-            <div className="stat-value" style={{color: 'rgb(245, 158, 11)'}}>{medPct}%</div>
+            <div className="stat-value stat-value-medium">{medPct}%</div>
             <div className="stat-delta">{medium} queries</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Slow Queries (&ge;200ms)</div>
-            <div className="stat-value" style={{color: 'rgb(220, 38, 38)'}}>{slowPct}%</div>
+            <div className="stat-value stat-value-slow">{slowPct}%</div>
             <div className="stat-delta">{slow} queries</div>
           </div>
           <div className="stat-card">
@@ -231,10 +309,10 @@ export default function AdminDashboard({ activeSection }) {
                 <tr key={i}>
                   <td className="mono">{new Date(q.timestamp).toLocaleTimeString()}</td>
                   <td className="q-cell">{q.query}</td>
-                  <td><span style={{color: 'rgb(220, 38, 38)', fontWeight: 'bold'}}>{q.latency} ms</span></td>
+                  <td><span className="slow-latency">{q.latency} ms</span></td>
                   <td>{q.source === "cache" ? "Hit" : "Miss (Solr)"}</td>
                 </tr>
-              )) : <tr><td colSpan="4" style={{textAlign:"center", padding:20, opacity:0.5}}>No queries yet</td></tr>}
+              )) : <tr><td colSpan="4" className="table-empty">No queries yet</td></tr>}
             </tbody>
           </table>
         </div>
@@ -245,7 +323,7 @@ export default function AdminDashboard({ activeSection }) {
   if (activeSection === "logs") {
     return (
       <div className="admin-logs">
-        <div className="chart-header" style={{marginBottom: 16}}>
+        <div className="chart-header logs-header">
           <span className="chart-title">Live Query Logs ({logs.length})</span>
           <button className="export-btn">Refresh</button>
         </div>
@@ -263,7 +341,7 @@ export default function AdminDashboard({ activeSection }) {
                   {log.status === 'error' ? 'Error' : (log.latency > 500 ? 'Slow' : 'OK')}
                 </span></td>
               </tr>
-            )) : <tr><td colSpan="6" style={{textAlign:"center", padding:40, opacity:0.5}}>No recent logs to display</td></tr>}
+            )) : <tr><td colSpan="6" className="table-empty table-empty-lg">No recent logs to display</td></tr>}
           </tbody>
         </table>
       </div>
@@ -283,7 +361,7 @@ export default function AdminDashboard({ activeSection }) {
 
     return (
       <div className="admin-overview">
-        <div className="stat-grid" style={{gridTemplateColumns: '1fr 1fr'}}>
+        <div className="stat-grid stat-grid-two">
           <div className="stat-card">
             <div className="stat-label">Busiest Time of Day</div>
             <div className="stat-value">{maxV > 0 ? hours[mHi] : "N/A"}</div>
@@ -296,9 +374,9 @@ export default function AdminDashboard({ activeSection }) {
           </div>
         </div>
 
-        <div className="chart-card wide" style={{padding: '40px 20px'}}>
-          <div className="chart-header" style={{marginBottom: 30}}><span className="chart-title">Global Query Volume Heatmap</span></div>
-          <div className="heatmap-wrap" style={{transform: 'scale(1.2)', transformOrigin: 'top center', marginBottom: 60}}>
+        <div className="chart-card wide heatmap-global-card">
+          <div className="chart-header heatmap-global-header"><span className="chart-title">Global Query Volume Heatmap</span></div>
+          <div className="heatmap-wrap heatmap-global-wrap">
             <div className="heatmap-days">
               {days.map(d => <span key={d}>{d}</span>)}
             </div>
@@ -387,39 +465,39 @@ export default function AdminDashboard({ activeSection }) {
           ))}
         </div>
         
-        <div className="chart-card wide" style={{marginBottom: "30px"}}>
+        <div className="chart-card wide benchmark-card">
           <div className="chart-header">
             <span className="chart-title">Run Platform Benchmark</span>
-            <div style={{display: 'flex', gap: '10px'}}>
-               <button className="export-btn search-button" style={{margin:0}} onClick={runBenchmark} disabled={runningBenchmark}>{runningBenchmark ? 'Running...' : 'Run Benchmark'}</button>
+            <div className="benchmark-actions">
+               <button className="export-btn search-button benchmark-run-btn" onClick={runBenchmark} disabled={runningBenchmark}>{runningBenchmark ? 'Running...' : 'Run Benchmark'}</button>
                {benchmarkData && <button className="export-btn" onClick={exportCSV}>Export CSV</button>}
                {benchmarkData && <button className="export-btn" onClick={exportPDF}>Export PDF</button>}
             </div>
           </div>
           
           {benchmarkData && (
-             <div ref={reportRef} style={{padding: '20px', background: '#fff'}}>
+             <div ref={reportRef} className="benchmark-report">
                <h3>Benchmark Results</h3>
-               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
-                  <div style={{padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
-                    <div style={{fontSize: '12px', color: '#64748b'}}>Avg Raw Solr Latency</div>
-                    <div style={{fontSize: '20px', fontWeight: 'bold'}}>{benchmarkData.summary.avg_raw_latency_ms} ms</div>
+               <div className="benchmark-summary-grid">
+                  <div className="benchmark-summary-item">
+                    <div className="benchmark-summary-label">Avg Raw Solr Latency</div>
+                    <div className="benchmark-summary-value">{benchmarkData.summary.avg_raw_latency_ms} ms</div>
                   </div>
-                  <div style={{padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
-                    <div style={{fontSize: '12px', color: '#64748b'}}>Avg Cached Latency</div>
-                    <div style={{fontSize: '20px', fontWeight: 'bold', color: '#16a34a'}}>{benchmarkData.summary.avg_cached_latency_ms} ms</div>
+                  <div className="benchmark-summary-item">
+                    <div className="benchmark-summary-label">Avg Cached Latency</div>
+                    <div className="benchmark-summary-value benchmark-summary-value-green">{benchmarkData.summary.avg_cached_latency_ms} ms</div>
                   </div>
-                  <div style={{padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
-                    <div style={{fontSize: '12px', color: '#64748b'}}>Avg Configured Speedup</div>
-                    <div style={{fontSize: '20px', fontWeight: 'bold', color: '#3b82f6'}}>{benchmarkData.summary.avg_speedup}</div>
+                  <div className="benchmark-summary-item">
+                    <div className="benchmark-summary-label">Avg Configured Speedup</div>
+                    <div className="benchmark-summary-value benchmark-summary-value-blue">{benchmarkData.summary.avg_speedup}</div>
                   </div>
-                  <div style={{padding: '15px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
-                    <div style={{fontSize: '12px', color: '#64748b'}}>Queries Tested</div>
-                    <div style={{fontSize: '20px', fontWeight: 'bold'}}>{benchmarkData.summary.total_queries}</div>
+                  <div className="benchmark-summary-item">
+                    <div className="benchmark-summary-label">Queries Tested</div>
+                    <div className="benchmark-summary-value">{benchmarkData.summary.total_queries}</div>
                   </div>
                </div>
                
-               <div style={{height: '300px', marginBottom: '30px'}}>
+               <div className="benchmark-bar-wrap">
                   <Bar data={{
                     labels: benchmarkData.benchmark.map(b => b.query),
                     datasets: [
@@ -445,7 +523,7 @@ export default function AdminDashboard({ activeSection }) {
                         <td>{b.num_results.toLocaleString()}</td>
                         <td>{b.raw_solr_latency_ms} ms</td>
                         <td>{b.cached_latency_ms} ms</td>
-                        <td style={{color: '#16a34a', fontWeight: 'bold'}}>{b.speedup}</td>
+                        <td className="speedup-value">{b.speedup}</td>
                       </tr>
                     ))}
                  </tbody>
@@ -456,7 +534,7 @@ export default function AdminDashboard({ activeSection }) {
 
         <div className="chart-card">
           <div className="chart-header"><span className="chart-title">Latency Over Time (Bucket Averages)</span></div>
-             <div style={{height: "250px", padding: "10px"}}>
+             <div className="line-chart-wrap">
                <Line data={lineChartData} options={{ 
                  maintainAspectRatio: false, 
                  interaction: { mode: 'index', intersect: false },
@@ -470,64 +548,58 @@ export default function AdminDashboard({ activeSection }) {
   }
 
   if (activeSection === "profiling") {
-    if (!sysMetrics) return <div style={{padding:40, textAlign:'center'}}>Loading Profiling Metrics...</div>;
-    if (sysMetrics.error) return <div style={{padding:40, textAlign:'center', color:'#ef4444'}}>Failed to load profiling data: {sysMetrics.details}</div>;
+     if (!sysMetrics) return <div className="loading-center">Loading Profiling Metrics...</div>;
+     if (sysMetrics.error) return <div className="loading-center loading-error">Failed to load profiling data: {sysMetrics.details}</div>;
     
     return (
        <div className="admin-overview">
-         <div className="chart-header" style={{marginBottom: 20}}>
+        <div className="chart-header profiling-header">
            <span className="chart-title">Prometheus / Grafana Style Profiling</span>
            <span className="source-indicator solr"><span className="source-dot" /> Live Metrics</span>
          </div>
-         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-            <div className="chart-card" style={{padding: '20px'}}>
-              <h4 style={{margin: '0 0 15px 0', display: 'flex', justifyContent: 'space-between'}}>CPU Usage<span>{sysMetrics.cpu.percent}%</span></h4>
-              <div style={{height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden'}}>
-                 <div style={{height: '100%', width: `${sysMetrics.cpu.percent}%`, background: sysMetrics.cpu.percent > 80 ? '#ef4444' : '#3b82f6', transition: 'width 0.5s'}} />
-              </div>
-              <div style={{marginTop: '15px', fontSize: '13px', color: '#64748b'}}>
+        <div className="profiling-grid">
+          <div className="chart-card profiling-card">
+            <h4 className="metric-title-row">CPU Usage<span>{sysMetrics.cpu.percent}%</span></h4>
+            <progress className={`metric-progress ${sysMetrics.cpu.percent > 80 ? "metric-progress-danger" : "metric-progress-blue"}`} value={sysMetrics.cpu.percent} max="100" />
+            <div className="metric-meta">
                  <div>Load Avg: {sysMetrics.cpu.load}</div>
                  <div>Cores: {sysMetrics.cpu.cores} Array(vCPUs)</div>
               </div>
             </div>
 
-            <div className="chart-card" style={{padding: '20px'}}>
-              <h4 style={{margin: '0 0 15px 0', display: 'flex', justifyContent: 'space-between'}}>Memory (JVM)<span>{sysMetrics.memory.percent}%</span></h4>
-              <div style={{height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden'}}>
-                 <div style={{height: '100%', width: `${sysMetrics.memory.percent}%`, background: sysMetrics.memory.percent > 85 ? '#ef4444' : '#10b981', transition: 'width 0.5s'}} />
-              </div>
-              <div style={{marginTop: '15px', fontSize: '13px', color: '#64748b'}}>
+          <div className="chart-card profiling-card">
+            <h4 className="metric-title-row">Memory (JVM)<span>{sysMetrics.memory.percent}%</span></h4>
+            <progress className={`metric-progress ${sysMetrics.memory.percent > 85 ? "metric-progress-danger" : "metric-progress-green"}`} value={sysMetrics.memory.percent} max="100" />
+            <div className="metric-meta">
                  <div>Used: {sysMetrics.memory.usedStr}</div>
                  <div>Max: {sysMetrics.memory.totalStr}</div>
               </div>
             </div>
 
-            <div className="chart-card" style={{padding: '20px'}}>
-              <h4 style={{margin: '0 0 15px 0', display: 'flex', justifyContent: 'space-between'}}>Disk I/O (Solr Core)<span>{sysMetrics.disk.percent}%</span></h4>
-              <div style={{height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden'}}>
-                 <div style={{height: '100%', width: `${sysMetrics.disk.percent}%`, background: sysMetrics.disk.percent > 90 ? '#ef4444' : '#8b5cf6', transition: 'width 0.5s'}} />
-              </div>
-              <div style={{marginTop: '15px', fontSize: '13px', color: '#64748b'}}>
+          <div className="chart-card profiling-card">
+            <h4 className="metric-title-row">Disk I/O (Solr Core)<span>{sysMetrics.disk.percent}%</span></h4>
+            <progress className={`metric-progress ${sysMetrics.disk.percent > 90 ? "metric-progress-danger" : "metric-progress-purple"}`} value={sysMetrics.disk.percent} max="100" />
+            <div className="metric-meta">
                  <div>Index Size: {sysMetrics.disk.usedStr}</div>
                  <div>Allocated Limit: {sysMetrics.disk.totalStr}</div>
               </div>
             </div>
          </div>
          
-         <div className="chart-card wide" style={{marginTop: '20px', padding: '20px'}}>
-           <h4 style={{margin: '0 0 15px 0'}}>Solr Engine State</h4>
-           <div style={{display: 'flex', gap: '30px'}}>
-              <div>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>Version</div>
-                 <div style={{fontSize: '18px', fontWeight: 'bold'}}>{sysMetrics.solr.version}</div>
+        <div className="chart-card wide solr-state-card">
+          <h4 className="solr-state-title">Solr Engine State</h4>
+          <div className="solr-state-grid">
+            <div>
+              <div className="solr-state-label">Version</div>
+              <div className="solr-state-value">{sysMetrics.solr.version}</div>
               </div>
               <div>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>Total Documents</div>
-                 <div style={{fontSize: '18px', fontWeight: 'bold'}}>{sysMetrics.solr.docs.toLocaleString()}</div>
+              <div className="solr-state-label">Total Documents</div>
+              <div className="solr-state-value">{sysMetrics.solr.docs.toLocaleString()}</div>
               </div>
               <div>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>Uptime</div>
-                 <div style={{fontSize: '18px', fontWeight: 'bold'}}>{sysMetrics.solr.upTimeText}</div>
+              <div className="solr-state-label">Uptime</div>
+              <div className="solr-state-value">{sysMetrics.solr.upTimeText}</div>
               </div>
            </div>
          </div>
@@ -537,18 +609,82 @@ export default function AdminDashboard({ activeSection }) {
 
   return (
     <div className="admin-overview" ref={adminSettingsRef}>
-      <div className="stat-grid" style={{gridTemplateColumns: 'minmax(300px, 1fr) minmax(300px, 1fr)'}}>
+      <div className="stat-grid settings-grid">
         <div className="chart-card">
           <div className="chart-header">
              <span className="chart-title">Account Security</span>
           </div>
-          <div style={{padding: '20px'}}>
-             <div style={{marginBottom: '15px'}}>
-               <label style={{display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#475569', marginBottom: '5px'}}>Current Admin Password</label>
-               <input type="password" placeholder="velocity2024" style={{width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px'}} disabled />
-               <small style={{color: '#94a3b8', display: 'block', marginTop: '5px'}}>Hardcoded for current version.</small>
-             </div>
-             <button className="search-button export-btn" style={{margin: 0, padding: '10px 20px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer'}} onClick={() => alert("Feature coming soon in next sprint.")}>Change Password</button>
+          <div className="settings-section-body">
+            {!showPasswordEditor ? (
+              <>
+                <div className="security-field">
+                  <label className="settings-label">Current Admin Password</label>
+                  <input type="password" value="********" className="settings-input" disabled />
+                  <small className="settings-hint">Password changed {getRelativePasswordAge()}</small>
+                </div>
+                <button
+                  className="search-button export-btn change-password-btn"
+                  onClick={() => {
+                    setSettingsError("");
+                    setSettingsSuccess("");
+                    setShowPasswordEditor(true);
+                  }}
+                >
+                  Change Password
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="security-field">
+                  <label className="settings-label">Current Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter current password"
+                    className="settings-input"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </div>
+                <div className="security-field">
+                  <label className="settings-label">New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter new password"
+                    className="settings-input"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </div>
+                <div className="security-field">
+                  <label className="settings-label">Confirm New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Confirm new password"
+                    className="settings-input"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                </div>
+                <div className="password-actions-row">
+                  <button className="search-button export-btn change-password-btn" onClick={handleChangePassword} disabled={updatingPassword}>
+                    {updatingPassword ? "Updating..." : "Confirm Change"}
+                  </button>
+                  <button
+                    className="export-btn cancel-password-btn"
+                    onClick={() => {
+                      setShowPasswordEditor(false);
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                      setSettingsError("");
+                    }}
+                    disabled={updatingPassword}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -556,54 +692,46 @@ export default function AdminDashboard({ activeSection }) {
           <div className="chart-header">
              <span className="chart-title">Instance Preferences</span>
           </div>
-          <div style={{padding: '20px'}}>
-             <div style={{marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+          <div className="settings-section-body">
+             <div className="preference-row">
                <div>
-                 <div style={{fontWeight: 'bold', fontSize: '14px', color: '#334155'}}>Dark Mode</div>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>Enable dark theme for admin console</div>
+                 <div className="preference-title">Clear Logs</div>
+                 <div className="preference-subtitle">Delete all search logs from analytics history.</div>
                </div>
-               <input type="checkbox" style={{width: '40px', height: '20px', cursor: 'pointer'}} />
-             </div>
-             
-             <div style={{marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '15px'}}>
-               <div>
-                 <div style={{fontWeight: 'bold', fontSize: '14px', color: '#334155'}}>Email Alerts</div>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>Receive daily health report digests</div>
-               </div>
-               <input type="checkbox" style={{width: '40px', height: '20px', cursor: 'pointer'}} defaultChecked />
-             </div>
-
-             <div style={{marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '15px'}}>
-               <div>
-                 <div style={{fontWeight: 'bold', fontSize: '14px', color: '#334155'}}>Auto-clear Logs</div>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>Archive metrics older than 30 days</div>
-               </div>
-               <input type="checkbox" style={{width: '40px', height: '20px', cursor: 'pointer'}} defaultChecked />
+               <button className="export-btn clear-logs-btn" onClick={handleClearLogs} disabled={clearingLogs}>
+                 {clearingLogs ? "Clearing..." : "Clear Logs"}
+               </button>
              </div>
           </div>
         </div>
+
+        {(settingsError || settingsSuccess) && (
+          <div className={`chart-card settings-feedback ${settingsError ? "settings-feedback-error" : "settings-feedback-success"}`}>
+            {settingsError || settingsSuccess}
+          </div>
+        )}
         
-        <div className="chart-card" style={{gridColumn: '1 / -1'}}>
+        <div className="chart-card full-width-card">
           <div className="chart-header">
              <span className="chart-title">System Configuration (Read-only)</span>
           </div>
-          <div style={{padding: '20px'}}>
-             <div style={{display: 'flex', gap: '20px'}}>
-               <div style={{flex: 1, padding: '15px', background: '#f8fafc', borderRadius: '8px'}}>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>L1 Cache Max Entries</div>
-                 <div style={{fontSize: '16px', fontWeight: 'bold'}}>500 items</div>
+          <div className="settings-section-body">
+             <div className="config-grid">
+               <div className="config-item">
+                 <div className="config-item-label">L1 Cache Max Entries</div>
+                 <div className="config-item-value">500 items</div>
                </div>
-               <div style={{flex: 1, padding: '15px', background: '#f8fafc', borderRadius: '8px'}}>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>L1 TTL</div>
-                 <div style={{fontSize: '16px', fontWeight: 'bold'}}>30.0 sec</div>
+               <div className="config-item">
+                 <div className="config-item-label">L1 TTL</div>
+                 <div className="config-item-value">30.0 sec</div>
                </div>
-               <div style={{flex: 1, padding: '15px', background: '#f8fafc', borderRadius: '8px'}}>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>L2 Cache TTL</div>
-                 <div style={{fontSize: '16px', fontWeight: 'bold'}}>300.0 sec</div>
+               <div className="config-item">
+                 <div className="config-item-label">L2 Cache TTL</div>
+                 <div className="config-item-value">300.0 sec</div>
                </div>
-               <div style={{flex: 1, padding: '15px', background: '#f8fafc', borderRadius: '8px'}}>
-                 <div style={{fontSize: '12px', color: '#64748b'}}>Default Solr Rows</div>
-                 <div style={{fontSize: '16px', fontWeight: 'bold'}}>10 results</div>
+               <div className="config-item">
+                 <div className="config-item-label">Default Solr Rows</div>
+                 <div className="config-item-value">10 results</div>
                </div>
              </div>
           </div>

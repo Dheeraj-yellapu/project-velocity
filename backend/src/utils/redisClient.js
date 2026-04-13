@@ -1,4 +1,5 @@
 import { createClient } from "redis";
+import { readFile, writeFile } from "node:fs/promises";
 
 /** ── Redis Client with Graceful Degradation ──────────────────────────
  *  If Redis is unavailable, the app falls back to direct Solr queries.
@@ -12,6 +13,9 @@ const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 const CACHE_TTL = Number(process.env.CACHE_TTL) || 60; // seconds
 const CONNECT_TIMEOUT_MS = 2000; // give up connecting after 2s
 const MAX_RETRIES = 3;
+const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "velocity2024";
+const PASSWORD_CHANGED_AT_KEY = "admin:password:changedAt";
+const ADMIN_SETTINGS_FILE = new URL("../../.admin-settings.json", import.meta.url);
 
 let client = null;
 let isConnected = false;
@@ -21,6 +25,48 @@ let retryCount = 0;
 
 // Local fallback memory list to keep Admin Dashboard alive when Redis is down
 const localLogsFallback = [];
+let localAdminPasswordFallback = DEFAULT_ADMIN_PASSWORD;
+let localPasswordChangedAtFallback = Date.now();
+
+async function readLocalAdminSettings() {
+  try {
+    const raw = await readFile(ADMIN_SETTINGS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    const password = typeof parsed.password === "string" && parsed.password.length > 0
+      ? parsed.password
+      : DEFAULT_ADMIN_PASSWORD;
+    const changedAt = Number(parsed.changedAt);
+    return {
+      password,
+      changedAt: Number.isFinite(changedAt) && changedAt > 0 ? changedAt : Date.now(),
+    };
+  } catch {
+    return {
+      password: localAdminPasswordFallback,
+      changedAt: localPasswordChangedAtFallback,
+    };
+  }
+}
+
+async function writeLocalAdminSettings(password, changedAt) {
+  localAdminPasswordFallback = password;
+  localPasswordChangedAtFallback = changedAt;
+  const body = JSON.stringify({ password, changedAt }, null, 2);
+  await writeFile(ADMIN_SETTINGS_FILE, body, "utf8");
+}
+
+async function getFallbackAdminSettings() {
+  const settings = await readLocalAdminSettings();
+  localAdminPasswordFallback = settings.password;
+  localPasswordChangedAtFallback = settings.changedAt;
+  return settings;
+}
+
+async function setFallbackAdminSettings(password) {
+  const changedAt = Date.now();
+  await writeLocalAdminSettings(password, changedAt);
+  return { password, changedAt };
+}
 
 /**
  * Race a promise against a timeout.
@@ -189,10 +235,136 @@ async function getSearchMetrics() {
 }
 
 /**
+ * Clear all stored search metrics from Redis and fallback memory.
+ */
+async function clearSearchMetrics() {
+  localLogsFallback.length = 0;
+  if (connectFailed) return;
+  try {
+    const redis = await getClient();
+    if (!redis) return;
+    await redis.del(["analytics:requests", "analytics:logs"]);
+  } catch (err) {
+    console.warn("[Redis] clearSearchMetrics error:", err.message);
+  }
+}
+
+/**
+ * Read admin password from storage. If not set in Redis, seed default value.
+ */
+async function getAdminPassword() {
+  if (connectFailed) {
+    const settings = await getFallbackAdminSettings();
+    return settings.password;
+  }
+  try {
+    const redis = await getClient();
+    if (!redis) {
+      const settings = await getFallbackAdminSettings();
+      return settings.password;
+    }
+
+    const stored = await redis.get("admin:password");
+    if (stored) return stored;
+
+    await redis.set("admin:password", DEFAULT_ADMIN_PASSWORD);
+    const changedAt = await redis.get(PASSWORD_CHANGED_AT_KEY);
+    if (!changedAt) {
+      localPasswordChangedAtFallback = Date.now();
+      await redis.set(PASSWORD_CHANGED_AT_KEY, String(localPasswordChangedAtFallback));
+    }
+    return DEFAULT_ADMIN_PASSWORD;
+  } catch (err) {
+    console.warn("[Redis] getAdminPassword error:", err.message);
+    const settings = await getFallbackAdminSettings();
+    return settings.password;
+  }
+}
+
+/**
+ * Persist updated admin password.
+ */
+async function setAdminPassword(newPassword) {
+  const changedAt = Date.now();
+  localAdminPasswordFallback = newPassword;
+  localPasswordChangedAtFallback = changedAt;
+  if (connectFailed) {
+    await setFallbackAdminSettings(newPassword);
+    return;
+  }
+  try {
+    const redis = await getClient();
+    if (!redis) {
+      await setFallbackAdminSettings(newPassword);
+      return;
+    }
+    await redis.set("admin:password", newPassword);
+    await redis.set(PASSWORD_CHANGED_AT_KEY, String(changedAt));
+  } catch (err) {
+    console.warn("[Redis] setAdminPassword error:", err.message);
+    await setFallbackAdminSettings(newPassword);
+  }
+}
+
+async function verifyAdminPassword(candidatePassword) {
+  const currentPassword = await getAdminPassword();
+  return candidatePassword === currentPassword;
+}
+
+async function getAdminPasswordMeta() {
+  if (connectFailed) {
+    const settings = await getFallbackAdminSettings();
+    return { changedAt: settings.changedAt };
+  }
+
+  try {
+    const redis = await getClient();
+    if (!redis) {
+      const settings = await getFallbackAdminSettings();
+      return { changedAt: settings.changedAt };
+    }
+
+    const changedAtRaw = await redis.get(PASSWORD_CHANGED_AT_KEY);
+    if (!changedAtRaw) {
+      const seed = Date.now();
+      localPasswordChangedAtFallback = seed;
+      await redis.set(PASSWORD_CHANGED_AT_KEY, String(seed));
+      return { changedAt: seed };
+    }
+
+    const parsed = Number(changedAtRaw);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      const settings = await getFallbackAdminSettings();
+      return { changedAt: settings.changedAt };
+    }
+
+    localPasswordChangedAtFallback = parsed;
+    return { changedAt: parsed };
+  } catch (err) {
+    console.warn("[Redis] getAdminPasswordMeta error:", err.message);
+    const settings = await getFallbackAdminSettings();
+    return { changedAt: settings.changedAt };
+  }
+}
+
+/**
  * Check if Redis is currently connected.
  */
 function isRedisConnected() {
   return isConnected;
 }
 
-export { cacheGet, cacheSet, cacheDel, isRedisConnected, CACHE_TTL, logSearchMetric, getSearchMetrics };
+export {
+  cacheGet,
+  cacheSet,
+  cacheDel,
+  isRedisConnected,
+  CACHE_TTL,
+  logSearchMetric,
+  getSearchMetrics,
+  clearSearchMetrics,
+  getAdminPassword,
+  setAdminPassword,
+  verifyAdminPassword,
+  getAdminPasswordMeta,
+};

@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-const ADMIN_CODE = "velocity2024";
-
 export default function Login() {
   const navigate = useNavigate();
   const [mode, setMode] = useState(null); // null | "user" | "admin"
@@ -22,11 +20,23 @@ export default function Login() {
   const handleAdminSubmit = async () => {
     if (!code) { setError("Please enter the access code"); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
-    if (code === ADMIN_CODE) {
+    try {
+      const res = await fetch("/api/admin/settings/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload.error || "Invalid access code");
+        setLoading(false);
+        return;
+      }
+
       navigate("/admin");
-    } else {
-      setError("Invalid access code");
+    } catch (_err) {
+      setError("Unable to verify access code right now");
       setLoading(false);
     }
   };

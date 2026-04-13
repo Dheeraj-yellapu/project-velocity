@@ -7,6 +7,7 @@ import suggestRoutes from "./routes/suggest.js";
 import analyticsRoutes from "./routes/analytics.js";
 import solrAdminRoutes from "./routes/solrAdmin.js";
 import metricsRoutes from "./routes/metrics.js";
+import adminSettingsRoutes from "./routes/adminSettings.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use("/api/suggest", suggestRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/admin/solr", solrAdminRoutes);
 app.use("/api/metrics", metricsRoutes);
+app.use("/api/admin/settings", adminSettingsRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error("[Error]", err.message);
