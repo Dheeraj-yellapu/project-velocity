@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { useSearch } from "../hooks/useSearch";
 import SearchBar from "../components/SearchBar";
-import SuggestionsDropdown from "../components/SuggestionsDropdown";
 import Filters from "../components/Filters";
 import ResultCard from "../components/ResultCard";
 
@@ -12,25 +11,11 @@ export default function Search() {
   const { query, setQuery, filters, setFilters, results, loading, error, meta, search } = useSearch();
   const [hasSearched, setHasSearched] = useState(false);
   const [viewMode, setViewMode] = useState("list");
+  const [showInlineSuggestions, setShowInlineSuggestions] = useState(false);
   
   // Debounced suggestions state
   const [suggestions, setSuggestions] = useState([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceTimerRef = useRef(null);
-  const searchBarRef = useRef(null);
-
-  // ── Handle clicks outside dropdown ────────────────────────────────
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (searchBarRef.current && !searchBarRef.current.contains(e.target)) {
-        setShowSuggestions(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // ── Fetch suggestions with debouncing ────────────────────────────
   const fetchSuggestions = useCallback((q) => {
@@ -38,21 +23,19 @@ export default function Search() {
 
     if (!q.trim() || q.trim().length < 2) {
       setSuggestions([]);
-      setShowSuggestions(false);
+      setShowInlineSuggestions(false);
       return;
     }
 
-    setSuggestionsLoading(true);
     debounceTimerRef.current = setTimeout(async () => {
       try {
         const res = await axios.get(`${API_BASE}/api/suggest`, { params: { q } });
         setSuggestions(res.data.suggestions || []);
-        setShowSuggestions(true);
+        setShowInlineSuggestions(true);
       } catch (err) {
         console.error("Suggestions fetch error:", err);
         setSuggestions([]);
-      } finally {
-        setSuggestionsLoading(false);
+        setShowInlineSuggestions(false);
       }
     }, 300);
 
@@ -62,13 +45,15 @@ export default function Search() {
   const handleSearch = useCallback(() => {
     if (!query.trim()) return;
     setHasSearched(true);
-    setShowSuggestions(false);
+    setShowInlineSuggestions(false);
+    setSuggestions([]);
     search(query, filters);
   }, [query, filters, search]);
 
   const handleSuggestion = (s) => {
     setQuery(s);
-    setShowSuggestions(false);
+    setShowInlineSuggestions(false);
+    setSuggestions([]);
     setHasSearched(true);
     search(s, filters);
   };
@@ -84,24 +69,15 @@ export default function Search() {
   return (
     <div className="search-page">
       <div className="search-hero">
-        <div ref={searchBarRef}>
-          <SearchBar
-            query={query}
-            onChange={(q) => { setQuery(q); fetchSuggestions(q); }}
-            onSearch={handleSearch}
-            suggestions={suggestions}
-            onSuggestionClick={handleSuggestion}
-            onClear={() => { setQuery(""); setHasSearched(false); setShowSuggestions(false); }}
-          />
-          <SuggestionsDropdown
-            suggestions={suggestions}
-            query={query}
-            isOpen={showSuggestions}
-            isLoading={suggestionsLoading}
-            onSuggestionClick={handleSuggestion}
-            onClose={() => setShowSuggestions(false)}
-          />
-        </div>
+        <SearchBar
+          query={query}
+          onChange={(q) => { setQuery(q); fetchSuggestions(q); }}
+          onSearch={handleSearch}
+          suggestions={suggestions}
+          showSuggestions={showInlineSuggestions}
+          onSuggestionClick={handleSuggestion}
+          onClear={() => { setQuery(""); setSuggestions([]); setShowInlineSuggestions(false); setHasSearched(false); }}
+        />
       </div>
 
       {hasSearched && (
