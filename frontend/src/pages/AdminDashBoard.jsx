@@ -37,6 +37,8 @@ export default function AdminDashboard({ activeSection }) {
   const [settingsSuccess, setSettingsSuccess] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [clearingLogs, setClearingLogs] = useState(false);
+  const [securityEnabled, setSecurityEnabled] = useState(true);
+  const [togglingSecurity, setTogglingSecurity] = useState(false);
   const adminSettingsRef = useRef(null);
   const reportRef = useRef(null);
   const qpsChartRef = useRef(null);
@@ -65,6 +67,12 @@ export default function AdminDashboard({ activeSection }) {
 
   const fetchPasswordMeta = async () => {
     try {
+      const msRes = await fetch("/api/admin/stats");
+      const msData = await msRes.json().catch(() => ({}));
+      if (msData && typeof msData.securityEnabled === "boolean") {
+        setSecurityEnabled(msData.securityEnabled);
+      }
+
       const res = await fetch("/api/admin/settings/password-meta");
       const payload = await res.json().catch(() => ({}));
       if (res.ok && payload.changedAt) {
@@ -148,6 +156,39 @@ export default function AdminDashboard({ activeSection }) {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         setSettingsError(payload.error || "Failed to clear logs.");
+      } else {
+        setSettingsSuccess("Logs cleared successfully.");
+      }
+    } catch (_err) {
+      setSettingsError("Unable to clear logs right now.");
+    } finally {
+      setClearingLogs(false);
+    }
+  };
+
+  const handleToggleSecurity = async () => {
+    setSettingsError("");
+    setSettingsSuccess("");
+    setTogglingSecurity(true);
+    try {
+      const res = await fetch("/api/admin/stats/toggle-security", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !securityEnabled }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setSecurityEnabled(payload.securityEnabled);
+        setSettingsSuccess(`Security layers successfully ${payload.securityEnabled ? "enabled" : "disabled"}.`);
+      } else {
+        setSettingsError(payload.error || "Failed to toggle security.");
+      }
+    } catch (_err) {
+      setSettingsError("Unable to toggle security right now.");
+    } finally {
+      setTogglingSecurity(false);
+    }
+  };
       } else {
         setSettingsSuccess(payload.message || "All logs have been cleared.");
         await fetchAnalyticsData();
@@ -969,10 +1010,25 @@ export default function AdminDashboard({ activeSection }) {
 
         <div className="chart-card">
           <div className="chart-header">
-             <span className="chart-title">Instance Preferences</span>
+             <span className="chart-title">Instance Preferences & Security</span>
           </div>
           <div className="settings-section-body">
              <div className="preference-row">
+               <div>
+                 <div className="preference-title">Active Security Layer</div>
+                 <div className="preference-subtitle">Toggle strict Rate Limiting, Audit tracking, and IP blocking. (Warning: Disabling allows vulnerability to high-load attacks).</div>
+               </div>
+               <button 
+                 className={`export-btn clear-logs-btn ${securityEnabled ? '' : 'warn'}`} 
+                 onClick={handleToggleSecurity} 
+                 disabled={togglingSecurity}
+                 style={securityEnabled ? { backgroundColor: 'var(--accent-color)', color: 'white' } : { backgroundColor: 'rgb(220, 38, 38)', color: 'white'}}
+               >
+                 {togglingSecurity ? "Toggling..." : (securityEnabled ? "Security: ON" : "Security: OFF")}
+               </button>
+             </div>
+             
+             <div className="preference-row" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
                <div>
                  <div className="preference-title">Clear Logs</div>
                  <div className="preference-subtitle">Delete all search logs from analytics history.</div>
