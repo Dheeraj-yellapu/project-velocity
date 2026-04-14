@@ -39,7 +39,7 @@ async function analyticsController(req, res) {
     const filteredLogs = logs.filter(l => l.timestamp >= rangeStartTime);
 
     // Current QPS (true 1-second window, no averaging)
-    const recent5sjust = logs.filter(l => l.timestamp >= now - 5000);
+    const recent5s = logs.filter(l => l.timestamp >= now - 5000);
     const currentQps = recent5s.length;
 
     // Overall stats in range

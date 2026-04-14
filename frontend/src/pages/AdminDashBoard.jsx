@@ -190,23 +190,23 @@ export default function AdminDashboard({ activeSection }) {
     }
   };
 
-  if (!analytics) {
+  if (!analytics && activeSection !== "settings" && activeSection !== "profiling") {
     return <div className="admin-overview admin-loading">Loading Live Analytics...</div>;
   }
 
   const {
-    stats,
-    charts,
-    topQueries,
+    stats = {},
+    charts = {},
+    topQueries = [],
     heatmapData = [
       [0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0],
       [0, 0, 0, 0, 0, 0, 0],
     ],
-    weeklyHeatmap,
-    logs,
-  } = analytics;
+    weeklyHeatmap = {},
+    logs = [],
+  } = analytics || {};
   const qpsSeries = charts?.qpsData ?? [];
   const qpsPointCount = qpsSeries.length || 1;
   const rangeMinutesByKey = { "1h": 60, "6h": 360, "24h": 1440 };
@@ -1008,14 +1008,30 @@ export default function AdminDashboard({ activeSection }) {
                  <div className="preference-title">Active Security Layer</div>
                  <div className="preference-subtitle">Toggle strict Rate Limiting, Audit tracking, and IP blocking. (Warning: Disabling allows vulnerability to high-load attacks).</div>
                </div>
-               <button 
-                 className={`export-btn clear-logs-btn ${securityEnabled ? '' : 'warn'}`} 
-                 onClick={handleToggleSecurity} 
-                 disabled={togglingSecurity}
-                 style={securityEnabled ? { backgroundColor: 'var(--accent-color)', color: 'white' } : { backgroundColor: 'rgb(220, 38, 38)', color: 'white'}}
-               >
-                 {togglingSecurity ? "Toggling..." : (securityEnabled ? "Security: ON" : "Security: OFF")}
-               </button>
+               <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: togglingSecurity ? 'not-allowed' : 'pointer' }}>
+                 <div style={{
+                   width: '46px', height: '24px', borderRadius: '24px', 
+                   backgroundColor: securityEnabled ? '#10b981' : '#ef4444', 
+                   position: 'relative', transition: 'background-color 0.2s ease', 
+                   opacity: togglingSecurity ? 0.6 : 1
+                 }}>
+                   <div style={{
+                     width: '20px', height: '20px', borderRadius: '50%', backgroundColor: 'white',
+                     position: 'absolute', top: '2px', left: securityEnabled ? '24px' : '2px',
+                     transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                   }} />
+                 </div>
+                 <span style={{ fontSize: '14px', fontWeight: 'bold', color: securityEnabled ? '#10b981' : '#ef4444', minWidth: '40px' }}>
+                   {togglingSecurity ? "..." : (securityEnabled ? "ON" : "OFF")}
+                 </span>
+                 <input 
+                   type="checkbox" 
+                   style={{ display: 'none' }}
+                   checked={securityEnabled}
+                   onChange={handleToggleSecurity}
+                   disabled={togglingSecurity}
+                 />
+               </label>
              </div>
              
              <div className="preference-row" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>

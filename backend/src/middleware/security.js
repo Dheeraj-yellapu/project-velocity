@@ -55,8 +55,11 @@ export function auditAndAnomalyMiddleware(req, res, next) {
     stats.endpoints[endpoint] = { hits: 0, totalLatency: 0 };
   }
 
-  // If security is disabled, skip checking the blacklist and checking for anomalies.
-  if (securityConfig.enabled) {
+  // If security is disabled or the request is to an admin control route, skip checking the blacklist and anomalies.
+  // This ensures the admin dashboard (and the toggle switch itself) is never locked out by its own security layer!
+  const isAdminRoute = req.originalUrl.startsWith("/api/admin");
+
+  if (securityConfig.enabled && !isAdminRoute) {
     // --- Check Blacklist ---
     if (blockList.has(ip)) {
       if (now < blockList.get(ip)) {

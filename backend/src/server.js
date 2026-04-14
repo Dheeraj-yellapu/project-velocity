@@ -25,11 +25,10 @@ if (useCluster && cluster.isPrimary) {
 } else {
   // Create HTTP server with optimized socket settings for high concurrency
   const server = http.createServer(app);
-  
-  // Increase max concurrent connections per worker
-  server.maxConnections = 2000;
-  server.maxRequestsPerSocket = 100; // Reuse sockets for up to 100 requests
-  
+
+  // Removed maxConnections because ephemeral TIME_WAIT sockets fill it up rapidly under loadtest without Keep-Alive (-k)
+  // Removed maxRequestsPerSocket because it causes artificial socket drops
+
   server.listen(PORT, () => {
     if (useCluster) {
       console.log(`[Worker ${process.pid}] Listening on port ${PORT} (maxConnections: 2000)`);
