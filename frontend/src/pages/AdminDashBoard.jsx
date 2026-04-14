@@ -469,13 +469,14 @@ export default function AdminDashboard({ activeSection }) {
           <button className="export-btn">Refresh</button>
         </div>
         <table className="query-table full">
-          <thead><tr><th>Timestamp</th><th>Query</th><th>Served By</th><th>Latency</th><th>Results</th><th>Cache</th><th>Status</th></tr></thead>
+          <thead><tr><th>Timestamp</th><th>Query</th><th>Solr Node</th><th>Backend</th><th>Latency</th><th>Results</th><th>Cache</th><th>Status</th></tr></thead>
           <tbody>
             {logs.length > 0 ? logs.map((log, i) => (
               <tr key={i}>
                 <td className="mono">{new Date(log.timestamp).toLocaleTimeString()}</td>
                 <td className="q-cell">{log.query}</td>
                 <td className="mono">{log.servedBy || log.ip || "-"}</td>
+                <td className="mono">{log.backendId || "-"}</td>
                 <td>{typeof log.latency === 'number' ? log.latency.toFixed(2) : log.latency} ms</td>
                 <td>{log.results.toLocaleString()}</td>
                 <td>{log.source === "cache" ? "Hit" : "Miss"}</td>
@@ -483,7 +484,7 @@ export default function AdminDashboard({ activeSection }) {
                   {log.status === 'error' ? 'Error' : (log.latency > 500 ? 'Slow' : 'OK')}
                 </span></td>
               </tr>
-            )) : <tr><td colSpan="7" className="table-empty table-empty-lg">No recent logs to display</td></tr>}
+            )) : <tr><td colSpan="8" className="table-empty table-empty-lg">No recent logs to display</td></tr>}
           </tbody>
         </table>
       </div>

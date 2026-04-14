@@ -2,6 +2,7 @@ import { buildSearchQuery } from "../utils/queryBuilder.js";
 import { searchSolr } from "../services/solrService.js";
 import { cacheGet, cacheSet, logSearchMetric } from "../utils/redisClient.js";
 import { SOLR_URL } from "../config/solr.js";
+import os from "os";
 
 /** ═══════════════════════════════════════════════════════════════════
  *  ── L1: In-Memory Cache (0ms latency) ─────────────────────────────
@@ -173,6 +174,7 @@ async function searchController(req, res, next) {
         status: "ok",
         servedBy: cacheNodeIp,
         ip: cacheNodeIp,
+        backendId: os.hostname() || "backend",
       }).catch(() => {});
 
       return res.json({
@@ -200,6 +202,7 @@ async function searchController(req, res, next) {
         status: "ok",
         servedBy: cacheNodeIp,
         ip: cacheNodeIp,
+        backendId: os.hostname() || "backend",
       }).catch(() => {});
 
       return res.json({
@@ -229,6 +232,7 @@ async function searchController(req, res, next) {
       status: "ok",
       servedBy: solrNodeIp,
       ip: solrNodeIp,
+      backendId: os.hostname() || "backend",
     }).catch(() => {});
 
     return res.json({
@@ -249,6 +253,7 @@ async function searchController(req, res, next) {
         status: "error",
         servedBy: solrIp,
         ip: solrIp,
+        backendId: os.hostname() || "backend",
       }).catch(() => {});
     }
     next(error);
