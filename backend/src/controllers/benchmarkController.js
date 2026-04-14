@@ -1,6 +1,4 @@
-import { buildSearchQuery } from "../utils/queryBuilder.js";
-import { searchSolr } from "../services/solrService.js";
-import { cacheGet, cacheSet, cacheDel } from "../utils/redisClient.js";
+import { searchController } from "./searchController.js";
 
 /** ── Predefined benchmark queries ─────────────────────────────────── */
 const BENCHMARK_QUERIES = [
@@ -13,6 +11,35 @@ const BENCHMARK_QUERIES = [
   "healthcare",
   "education",
 ];
+
+async function runSearchViaController(queryObject) {
+  const req = {
+    query: queryObject,
+    socket: {
+      localAddress: "127.0.0.1",
+      address: () => ({ address: "127.0.0.1" }),
+    },
+    headers: {},
+  };
+
+  return new Promise((resolve, reject) => {
+    const startedAt = performance.now();
+    let statusCode = 200;
+
+    const res = {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(payload) {
+        const latencyMs = Number((performance.now() - startedAt).toFixed(3));
+        resolve({ statusCode, payload, latencyMs });
+      },
+    };
+
+    searchController(req, res, reject).catch(reject);
+  });
+}
 
 /**
  * GET /api/benchmark
@@ -28,44 +55,37 @@ async function benchmarkController(_req, res, next) {
     const results = [];
 
     for (const q of BENCHMARK_QUERIES) {
-      const cacheKey = `search:${q}`;
-
-      // ── 1. Raw Solr (bypass cache) ───────────────────────────────
-      await cacheDel(cacheKey); // ensure cache miss
-
-      const rawStart = Date.now();
-      const queryParams = buildSearchQuery({ q, page: 1, pageSize: 10 });
-      const solrResponse = await searchSolr(queryParams);
-      const rawLatency = Date.now() - rawStart;
-
-      const qtime = solrResponse.responseHeader?.QTime ?? null;
-      const numFound = solrResponse.response?.numFound ?? 0;
-      const docs = solrResponse.response?.docs ?? [];
-
-      // ── 2. Seed cache ────────────────────────────────────────────
-      const payload = {
-        results: docs,
-        total: numFound,
-        qtime_ms: qtime,
-        query: q,
+      const benchmarkQuery = {
+        q,
+        sort: "relevance",
+        start: "0",
+        rows: "10",
       };
-      await cacheSet(cacheKey, payload);
 
-      // ── 3. Cached read ───────────────────────────────────────────
-      const cachedStart = Date.now();
-      const cached = await cacheGet(cacheKey);
-      const cachedLatency = Date.now() - cachedStart;
+      // Run twice with the same req.query shape so cache key generation is identical.
+      const rawRun = await runSearchViaController(benchmarkQuery);
+      const cachedRun = await runSearchViaController(benchmarkQuery);
+
+      if (rawRun.statusCode >= 400 || cachedRun.statusCode >= 400) {
+        throw new Error(`Benchmark request failed for query: ${q}`);
+      }
+
+      const rawLatency = rawRun.latencyMs;
+      const cachedLatency =
+        cachedRun.payload?.source === "cache" ? cachedRun.latencyMs : null;
+      const qtime = rawRun.payload?.qtime_ms ?? null;
+      const numFound = rawRun.payload?.total ?? 0;
 
       results.push({
         query: q,
         num_results: numFound,
         solr_qtime_ms: qtime,
         raw_solr_latency_ms: rawLatency,
-        cached_latency_ms: cached ? cachedLatency : null,
-        speedup: cached
+        cached_latency_ms: cachedLatency,
+        speedup: cachedLatency
           ? `${(rawLatency / Math.max(cachedLatency, 1)).toFixed(1)}x`
           : "N/A",
-        cache_hit: !!cached,
+        cache_hit: cachedRun.payload?.source === "cache",
       });
     }
 
