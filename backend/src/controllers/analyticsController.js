@@ -1,8 +1,31 @@
 import { getSearchMetrics } from "../utils/redisClient.js";
 
+function normalizeTimestamp(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  }
+  return NaN;
+}
+
+function buildHeatmapCell(count, maxCount) {
+  if (count <= 0 || maxCount <= 0) {
+    return { count: 0, percent: 0 };
+  }
+
+  return {
+    count,
+    percent: Math.max(1, Math.round((count / maxCount) * 100)),
+  };
+}
+
 async function analyticsController(req, res) {
   try {
-    const logs = await getSearchMetrics(); // Array of { timestamp, query, latency, results, source, status }
+    const logs = (await getSearchMetrics())
+      .map((log) => ({ ...log, timestamp: normalizeTimestamp(log.timestamp) }))
+      .filter((log) => Number.isFinite(log.timestamp));
+    // Array of { timestamp, query, latency, results, source, status }
     
     const now = Date.now();
     // Default range is 1h: 3600000 ms
@@ -27,7 +50,8 @@ async function analyticsController(req, res) {
 
     filteredLogs.forEach(l => {
       totalLatency += l.latency;
-      if (l.status === "error") errorCount++;
+      const status = typeof l.status === "string" ? l.status.toLowerCase() : "ok";
+      if (status === "error") errorCount++;
       if (l.source === "cache") cacheHits++;
       
       const q = l.query.toLowerCase();
@@ -40,8 +64,20 @@ async function analyticsController(req, res) {
 
     const throughput = filteredLogs.length;
     const avgLatency = throughput > 0 ? (totalLatency / throughput).toFixed(1) : 0;
-    const errorRate = throughput > 0 ? ((errorCount / throughput) * 100).toFixed(2) : 0;
+    const errorRate = throughput > 0 ? (errorCount / throughput) * 100 : 0;
     const cacheHitRate = throughput > 0 ? ((cacheHits / throughput) * 100).toFixed(1) : 0;
+
+    // True peak QPS: max successful requests observed in any 1-second window in selected range.
+    const perSecondCounts = new Map();
+    filteredLogs.forEach((l) => {
+      const normalizedStatus = typeof l.status === "string" ? l.status.toLowerCase() : "ok";
+      if (normalizedStatus === "error") return;
+      const secondKey = Math.floor(l.timestamp / 1000);
+      perSecondCounts.set(secondKey, (perSecondCounts.get(secondKey) || 0) + 1);
+    });
+    const maxQpsPerSecond = perSecondCounts.size > 0
+      ? Math.max(...perSecondCounts.values())
+      : 0;
 
     // Deep Query Analytics
     const latencyDistribution = { fast: 0, medium: 0, slow: 0 };
@@ -101,13 +137,10 @@ async function analyticsController(req, res) {
        heatmapRaw[hi][day]++;
     });
     
-    // Normalize heatmap using sqrt scaling so low traffic is still visible.
+    // Normalize heatmap to percentages so low traffic stays visible without rounding to zero.
     const maxHeat = Math.max(...heatmapRaw.flat()) || 1;
     const heatmapData = heatmapRaw.map((row) =>
-      row.map((v) => {
-        if (v <= 0) return 0;
-        return Math.max(8, Math.round((Math.sqrt(v) / Math.sqrt(maxHeat)) * 100));
-      })
+      row.map((count) => buildHeatmapCell(count, maxHeat))
     );
 
     // Last 5 weeks daily heatmap (Mon-Sun per week) to inspect previous weeks.
@@ -137,10 +170,7 @@ async function analyticsController(req, res) {
 
     const maxWeekly = Math.max(...weeklyRaw.flat()) || 1;
     const weeklyData = weeklyRaw.map((row) =>
-      row.map((v) => {
-        if (v <= 0) return 0;
-        return Math.max(8, Math.round((Math.sqrt(v) / Math.sqrt(maxWeekly)) * 100));
-      })
+      row.map((count) => buildHeatmapCell(count, maxWeekly))
     );
 
     const weekLabels = Array.from({ length: WEEKS }, (_, i) => {
@@ -151,9 +181,10 @@ async function analyticsController(req, res) {
     res.json({
       stats: {
         qpsText: currentQps.toFixed(2),
+        maxQpsPerSecond,
         latencyText: `${avgLatency} ms`,
         throughputText: throughput.toLocaleString(),
-        errorRateText: `${errorRate}%`,
+        errorRateText: `${errorRate.toFixed(2)}%`,
         cacheHitRateText: `${cacheHitRate}%`
       },
       charts: {

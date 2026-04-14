@@ -41,7 +41,7 @@ function buildSearchQuery({
   if (from || to) {
     const start = from || "*";
     const end = to || "*";
-    fq.push(`published_at:[${start} TO ${end}]`);
+    fq.push(`pub:[${start} TO ${end}]`);
   }
 
   // ── Pagination ────────────────────────────────────────────────────
@@ -55,30 +55,30 @@ function buildSearchQuery({
   const params = {
     q: safeQ,
     defType: "edismax",
-    qf: "title^5 type^4 summary^2 body^1",
-    fl: "title,summary,type,published_at,body,id,url,lang",
+    qf: "title^5 type^4 sum^2 body^1",
+    fl: "title,sum,type,pub,body,id,url,lang",
     rows,
     start,
   };
 
   // ── Sorting ───────────────────────────────────────────────────────
   if (sortParam === "newest") {
-    params.sort = "published_at desc";
+    params.sort = "pub desc";
   } else if (sortParam === "oldest") {
-    params.sort = "published_at asc";
+    params.sort = "pub asc";
   } else if (sortParam === "date") {
-    params.sort = "published_at desc";
+    params.sort = "pub desc";
   } else if (sortParam === "date_asc") {
-    params.sort = "published_at asc";
+    params.sort = "pub asc";
   }
   // "relevance" (default) uses edismax score — no explicit sort needed
 
   // ── Full mode adds phrase boosting + recency bias ─────────────────
   if (mode === "full") {
-    params.pf = "title^10 summary^5";
+    params.pf = "title^10 sum^5";
     // Only add recency bias when sorting by relevance
     if (!sortParam || sortParam === "relevance") {
-      params.bf = "recip(ms(NOW,published_at),3.16e-11,1,1)";
+      params.bf = "recip(ms(NOW,pub),3.16e-11,1,1)";
     }
   }
 

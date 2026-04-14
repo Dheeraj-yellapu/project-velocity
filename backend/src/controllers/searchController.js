@@ -171,6 +171,7 @@ async function searchController(req, res, next) {
         results: memCached.total,
         source: "cache",
         status: "ok",
+        servedBy: cacheNodeIp,
         ip: cacheNodeIp,
       }).catch(() => {});
 
@@ -197,6 +198,7 @@ async function searchController(req, res, next) {
         results: redisCached.total,
         source: "cache",
         status: "ok",
+        servedBy: cacheNodeIp,
         ip: cacheNodeIp,
       }).catch(() => {});
 
@@ -225,6 +227,7 @@ async function searchController(req, res, next) {
       results: payload.total,
       source: "solr",
       status: "ok",
+      servedBy: solrNodeIp,
       ip: solrNodeIp,
     }).catch(() => {});
 
@@ -244,6 +247,7 @@ async function searchController(req, res, next) {
         results: 0,
         source: "error",
         status: "error",
+        servedBy: solrIp,
         ip: solrIp,
       }).catch(() => {});
     }

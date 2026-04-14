@@ -8,8 +8,17 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, BarElement, Filler);
 
 function HeatmapCell({ value }) {
-  const bucket = Math.max(0, Math.min(9, Math.floor(value / 10)));
-  return <div className={`heatmap-cell heatmap-cell-${bucket}`} title={`${value}%`} />;
+  const count = typeof value === "object" && value !== null ? value.count ?? 0 : Number(value) || 0;
+  const percent = typeof value === "object" && value !== null ? value.percent ?? 0 : Number(value) || 0;
+  const bucket = Math.max(0, Math.min(9, Math.floor(percent / 10)));
+  return <div className={`heatmap-cell heatmap-cell-${bucket}`} title={`${count} queries (${percent}%)`} />;
+}
+
+function getHeatmapCount(value) {
+  if (typeof value === "object" && value !== null) {
+    return value.count ?? 0;
+  }
+  return Number(value) || 0;
 }
 
 export default function AdminDashboard({ activeSection }) {
@@ -30,6 +39,11 @@ export default function AdminDashboard({ activeSection }) {
   const [clearingLogs, setClearingLogs] = useState(false);
   const adminSettingsRef = useRef(null);
   const reportRef = useRef(null);
+  const qpsChartRef = useRef(null);
+  const latencyChartRef = useRef(null);
+  const overviewHeatmapRef = useRef(null);
+  const globalHeatmapRef = useRef(null);
+  const weeklyHeatmapRef = useRef(null);
 
   const fetchAnalyticsData = async () => {
     try {
@@ -169,7 +183,6 @@ export default function AdminDashboard({ activeSection }) {
   const bucketMinutes = totalRangeMinutes / qpsPointCount;
   const bucketSeconds = bucketMinutes * 60;
   const qpsMaxData = qpsSeries.length > 0 ? Math.max(...qpsSeries) : 0;
-  const qpsMinData = qpsSeries.length > 0 ? Math.min(...qpsSeries) : 0;
   const qpsScaleMax = qpsMaxData > 0 ? Number((qpsMaxData * 1.1).toFixed(4)) : 1;
   const qpsScaleMid = qpsScaleMax / 2;
   const formatQpsValue = (value) => {
@@ -183,6 +196,80 @@ export default function AdminDashboard({ activeSection }) {
     const minutesAgo = Math.round((qpsPointCount - 1 - i) * bucketMinutes);
     return minutesAgo === 0 ? "Now" : `${minutesAgo}m ago`;
   });
+
+  const exportQpsGraphPng = () => {
+    if (!qpsChartRef.current || qpsSeries.length === 0) return;
+    const imageUrl = qpsChartRef.current.toBase64Image("image/png", 1);
+    const link = document.createElement("a");
+    link.href = imageUrl;
+    link.setAttribute("download", `velocity_qps_over_time_${new Date().getTime()}.png`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportQpsGraphCsv = () => {
+    if (qpsSeries.length === 0) return;
+    const csvRows = qpsSeries.map((qps, i) => ({
+      range: qpsRange,
+      label: qpsLabels[i],
+      qps: Number(qps),
+    }));
+    const csv = Papa.unparse(csvRows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `velocity_qps_over_time_${new Date().getTime()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadBlobAsFile = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportElementAsPng = async (elementRef, filePrefix) => {
+    if (!elementRef?.current) return;
+    const canvas = await html2canvas(elementRef.current, {
+      scale: 2,
+      backgroundColor: null,
+    });
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      downloadBlobAsFile(blob, `${filePrefix}_${new Date().getTime()}.png`);
+    }, "image/png");
+  };
+
+  const heatmapToCsvRows = (matrix, rowLabels, colLabels, sectionLabel) => {
+    const rows = [];
+    for (let rowIndex = 0; rowIndex < matrix.length; rowIndex += 1) {
+      const row = matrix[rowIndex] || [];
+      for (let colIndex = 0; colIndex < colLabels.length; colIndex += 1) {
+        const rawValue = row[colIndex] ?? 0;
+        const count = typeof rawValue === "object" && rawValue !== null ? rawValue.count ?? 0 : Number(rawValue) || 0;
+        const percent = typeof rawValue === "object" && rawValue !== null ? rawValue.percent ?? 0 : Number(rawValue) || 0;
+        rows.push({
+          section: sectionLabel,
+          row: rowLabels[rowIndex] ?? `Row ${rowIndex + 1}`,
+          column: colLabels[colIndex] ?? `Col ${colIndex + 1}`,
+          count,
+          percent,
+        });
+      }
+    }
+    return rows;
+  };
+
   const systemConfig = {
     l1CacheMaxEntries: 500,
     l1TtlSec: 30.0,
@@ -193,9 +280,10 @@ export default function AdminDashboard({ activeSection }) {
   if (activeSection === "overview") {
     return (
       <div className="admin-overview">
-        <div className="stat-grid">
+        <div className="stat-grid overview-stat-grid">
           {[
             { label: "QPS (Current)", value: stats.qpsText, delta: "Live", color: "blue" },
+            { label: "Highest QPS", value: formatQpsValue(qpsMaxData), delta: `Peak in ${qpsRange}`, color: "blue" },
             { label: "Avg. Latency", value: stats.latencyText, delta: "Live", color: "amber" },
             { label: "Throughput", value: stats.throughputText, delta: "Total in range", color: "green" },
             { label: "Error Rate", value: stats.errorRateText, delta: "Live", color: "red" },
@@ -213,8 +301,9 @@ export default function AdminDashboard({ activeSection }) {
             <div className="chart-header">
               <span className="chart-title">QPS Over Time</span>
               <div className="qps-header-controls">
-                <div className="qps-minmax-text">
-                      Max: {formatQpsValue(qpsMaxData)} QPS | Min: {formatQpsValue(qpsMinData)} QPS
+                  <div className="qps-export-controls">
+                    <button className="export-btn" onClick={exportQpsGraphPng} disabled={qpsSeries.length === 0}>Export PNG</button>
+                    <button className="export-btn" onClick={exportQpsGraphCsv} disabled={qpsSeries.length === 0}>Export CSV</button>
                   </div>
                   <select className="chart-select" value={qpsRange} onChange={e => setQpsRange(e.target.value)}>
                     <option value="1h">Last 1 hour</option>
@@ -229,6 +318,7 @@ export default function AdminDashboard({ activeSection }) {
               </div>
               <div className="chart-area qps-chart-area">
                 <Line 
+                   ref={qpsChartRef}
                    data={{
                      labels: qpsLabels,
                      datasets: [
@@ -294,8 +384,11 @@ export default function AdminDashboard({ activeSection }) {
         </div>
 
         <div className="chart-card">
-          <div className="chart-header"><span className="chart-title">Query Volume Heatmap</span></div>
-          <div className="heatmap-wrap">
+          <div className="chart-header">
+            <span className="chart-title">Query Volume Heatmap</span>
+            <button className="export-btn" onClick={() => exportElementAsPng(overviewHeatmapRef, "velocity_overview_heatmap")}>Export PNG</button>
+          </div>
+          <div ref={overviewHeatmapRef} className="heatmap-wrap">
             <div className="heatmap-days">
               {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => <span key={d}>{d}</span>)}
             </div>
@@ -376,13 +469,13 @@ export default function AdminDashboard({ activeSection }) {
           <button className="export-btn">Refresh</button>
         </div>
         <table className="query-table full">
-          <thead><tr><th>Timestamp</th><th>Query</th><th>IP</th><th>Latency</th><th>Results</th><th>Cache</th><th>Status</th></tr></thead>
+          <thead><tr><th>Timestamp</th><th>Query</th><th>Served By</th><th>Latency</th><th>Results</th><th>Cache</th><th>Status</th></tr></thead>
           <tbody>
             {logs.length > 0 ? logs.map((log, i) => (
               <tr key={i}>
                 <td className="mono">{new Date(log.timestamp).toLocaleTimeString()}</td>
                 <td className="q-cell">{log.query}</td>
-                <td className="mono">{log.ip || "-"}</td>
+                <td className="mono">{log.servedBy || log.ip || "-"}</td>
                 <td>{typeof log.latency === 'number' ? log.latency.toFixed(2) : log.latency} ms</td>
                 <td>{log.results.toLocaleString()}</td>
                 <td>{log.source === "cache" ? "Hit" : "Miss"}</td>
@@ -402,11 +495,31 @@ export default function AdminDashboard({ activeSection }) {
     let maxV = 0; let mHi = 0; let mDi = 0;
     heatmapData.forEach((row, hi) => {
       row.forEach((v, di) => {
-        if (v > maxV) { maxV = v; mHi = hi; mDi = di; }
+        const count = getHeatmapCount(v);
+        if (count > maxV) { maxV = count; mHi = hi; mDi = di; }
       });
     });
     const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
     const hours = ["12 AM - 6 AM","6 AM - 12 PM","12 PM - 6 PM","6 PM - 12 AM"];
+
+    const exportGlobalHeatmapCsv = () => {
+      const csvRows = heatmapToCsvRows(heatmapData, ["12 AM", "6 AM", "12 PM", "6 PM"], days, "Global Query Volume Heatmap");
+      const csv = Papa.unparse(csvRows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      downloadBlobAsFile(blob, `velocity_global_heatmap_${new Date().getTime()}.csv`);
+    };
+
+    const exportWeeklyHeatmapCsv = () => {
+      const csvRows = heatmapToCsvRows(
+        weeklyHeatmap?.data || [],
+        weeklyHeatmap?.weekLabels || [],
+        weeklyHeatmap?.dayLabels || days,
+        "Previous 5 Weeks Daily Heatmap"
+      );
+      const csv = Papa.unparse(csvRows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      downloadBlobAsFile(blob, `velocity_weekly_heatmap_${new Date().getTime()}.csv`);
+    };
 
     return (
       <div className="admin-overview">
@@ -424,8 +537,14 @@ export default function AdminDashboard({ activeSection }) {
         </div>
 
         <div className="chart-card wide heatmap-global-card">
-          <div className="chart-header heatmap-global-header"><span className="chart-title">Global Query Volume Heatmap</span></div>
-          <div className="heatmap-wrap heatmap-global-wrap">
+          <div className="chart-header heatmap-global-header">
+            <span className="chart-title">Global Query Volume Heatmap</span>
+            <div className="heatmap-export-actions">
+              <button className="export-btn" onClick={() => exportElementAsPng(globalHeatmapRef, "velocity_global_heatmap")}>Export PNG</button>
+              <button className="export-btn" onClick={exportGlobalHeatmapCsv}>Export CSV</button>
+            </div>
+          </div>
+          <div ref={globalHeatmapRef} className="heatmap-wrap heatmap-global-wrap">
             <div className="heatmap-days">
               {days.map(d => <span key={d}>{d}</span>)}
             </div>
@@ -444,8 +563,14 @@ export default function AdminDashboard({ activeSection }) {
         </div>
 
         <div className="chart-card wide">
-          <div className="chart-header"><span className="chart-title">Previous 5 Weeks (Daily Heatmap)</span></div>
-          <div className="heatmap-wrap weekly-heatmap-wrap">
+          <div className="chart-header">
+            <span className="chart-title">Previous 5 Weeks (Daily Heatmap)</span>
+            <div className="heatmap-export-actions">
+              <button className="export-btn" onClick={() => exportElementAsPng(weeklyHeatmapRef, "velocity_weekly_heatmap")}>Export PNG</button>
+              <button className="export-btn" onClick={exportWeeklyHeatmapCsv} disabled={!weeklyHeatmap?.data?.length}>Export CSV</button>
+            </div>
+          </div>
+          <div ref={weeklyHeatmapRef} className="heatmap-wrap weekly-heatmap-wrap">
             <div className="heatmap-days weekly-heatmap-days">
               {(weeklyHeatmap?.dayLabels || days).map((d) => <span key={d}>{d}</span>)}
             </div>
@@ -518,6 +643,28 @@ export default function AdminDashboard({ activeSection }) {
           tension: 0.3,
         },
       ],
+    };
+
+    const exportLatencyGraphPng = () => {
+      if (!latencyChartRef.current || !charts.latData?.length) return;
+      const imageUrl = latencyChartRef.current.toBase64Image("image/png", 1);
+      const link = document.createElement("a");
+      link.href = imageUrl;
+      link.setAttribute("download", `velocity_latency_over_time_${new Date().getTime()}.png`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    const exportLatencyGraphCsv = () => {
+      if (!charts.latData?.length) return;
+      const csvRows = charts.latData.map((latencyMs, index) => ({
+        bucket: index + 1,
+        latencyMs: Number(latencyMs),
+      }));
+      const csv = Papa.unparse(csvRows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      downloadBlobAsFile(blob, `velocity_latency_over_time_${new Date().getTime()}.csv`);
     };
 
     return (
@@ -605,9 +752,15 @@ export default function AdminDashboard({ activeSection }) {
         </div>
 
         <div className="chart-card">
-          <div className="chart-header"><span className="chart-title">Latency Over Time (Bucket Averages)</span></div>
+          <div className="chart-header">
+            <span className="chart-title">Latency Over Time (Bucket Averages)</span>
+            <div className="heatmap-export-actions">
+              <button className="export-btn" onClick={exportLatencyGraphPng} disabled={!charts.latData?.length}>Export PNG</button>
+              <button className="export-btn" onClick={exportLatencyGraphCsv} disabled={!charts.latData?.length}>Export CSV</button>
+            </div>
+          </div>
              <div className="line-chart-wrap">
-               <Line data={lineChartData} options={{ 
+               <Line ref={latencyChartRef} data={lineChartData} options={{ 
                  maintainAspectRatio: false, 
                  interaction: { mode: 'index', intersect: false },
                  plugins: { legend: { display: false }, tooltip: { enabled: true, mode: 'index', intersect: false } }, 

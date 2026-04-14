@@ -135,6 +135,7 @@ body, html { height: 100%; }
 /* COMPONENTS — Admin Overview */
 .admin-overview { display: flex; flex-direction: column; gap: 20px; }
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.overview-stat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
 .stat-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
 .stat-value { font-size: 26px; font-weight: 700; font-family: var(--font); margin-bottom: 4px; }
@@ -163,6 +164,7 @@ body, html { height: 100%; }
 .status-badge.warn { background: var(--amber-dim); color: var(--amber); }
 .export-btn { font-size: 12px; padding: 5px 12px; border: 1px solid var(--border2); border-radius: var(--radius); color: var(--text2); }
 .export-btn:hover { border-color: var(--blue); color: var(--blue); }
+.export-btn:disabled { opacity: 0.45; cursor: not-allowed; border-color: var(--border2); color: var(--text2); }
 .admin-logs { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
 
 /* COMPONENTS — Heatmap */
@@ -287,7 +289,9 @@ body, html { height: 100%; }
 /* AdminDashboard extracted inline styles */
 .admin-loading { padding: 40px; text-align: center; opacity: 0.7; }
 .qps-header-controls { margin-left: auto; display: flex; gap: 10px; align-items: center; }
-.qps-minmax-text { font-size: 14px; font-weight: 700; color: var(--blue); }
+.qps-export-controls { display: flex; gap: 8px; }
+.qps-export-controls .export-btn:disabled { opacity: 0.45; cursor: not-allowed; border-color: var(--border2); color: var(--text2); }
+.heatmap-export-actions { display: flex; align-items: center; gap: 8px; }
 .qps-chart-area { height: 140px; position: relative; width: 100%; }
 .table-empty { text-align: center; padding: 20px; opacity: 0.5; }
 .table-empty-lg { padding: 40px; }
@@ -421,6 +425,7 @@ body, html { height: 100%; }
 .heatmap-cell-9 { background: rgb(210, 26, 45); opacity: 0.93; }
 
 @media (max-width: 1100px) {
+  .overview-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .qps-header-controls { flex-wrap: wrap; justify-content: flex-end; }
   .benchmark-summary-grid { grid-template-columns: repeat(2, 1fr); }
   .profiling-grid { grid-template-columns: 1fr; }
@@ -429,6 +434,7 @@ body, html { height: 100%; }
 }
 
 @media (max-width: 768px) {
+  .overview-stat-grid { grid-template-columns: 1fr; }
   .stat-grid-two { grid-template-columns: 1fr; }
   .settings-grid { grid-template-columns: 1fr; }
   .solr-state-grid { grid-template-columns: 1fr; gap: 14px; }
