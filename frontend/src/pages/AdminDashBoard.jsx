@@ -183,6 +183,7 @@ export default function AdminDashboard({ activeSection }) {
   const bucketMinutes = totalRangeMinutes / qpsPointCount;
   const bucketSeconds = bucketMinutes * 60;
   const qpsMaxData = qpsSeries.length > 0 ? Math.max(...qpsSeries) : 0;
+  const peakQpsPerSecond = Number(stats?.maxQpsPerSecond || 0);
   const qpsScaleMax = qpsMaxData > 0 ? Number((qpsMaxData * 1.1).toFixed(4)) : 1;
   const qpsScaleMid = qpsScaleMax / 2;
   const formatQpsValue = (value) => {
@@ -283,7 +284,7 @@ export default function AdminDashboard({ activeSection }) {
         <div className="stat-grid overview-stat-grid">
           {[
             { label: "QPS (Current)", value: stats.qpsText, delta: "Live", color: "blue" },
-            { label: "Highest QPS", value: formatQpsValue(qpsMaxData), delta: `Peak in ${qpsRange}`, color: "blue" },
+            { label: "Highest QPS", value: peakQpsPerSecond.toLocaleString(), delta: "Peak in 1s window", color: "blue" },
             { label: "Avg. Latency", value: stats.latencyText, delta: "Live", color: "amber" },
             { label: "Throughput", value: stats.throughputText, delta: "Total in range", color: "green" },
             { label: "Error Rate", value: stats.errorRateText, delta: "Live", color: "red" },
