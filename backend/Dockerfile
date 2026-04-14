@@ -19,4 +19,4 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
 EXPOSE 4000
 
 # Start application
-CMD ["node", "src/app.js"]
+CMD ["node", "src/server.js"]

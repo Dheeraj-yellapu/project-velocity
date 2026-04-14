@@ -6,7 +6,7 @@ import SuggestionsDropdown from "../components/SuggestionsDropdown";
 import Filters from "../components/Filters";
 import ResultCard from "../components/ResultCard";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE = "http://10.145.211.56:4000";
 
 export default function Search() {
   const { query, setQuery, filters, setFilters, results, loading, error, meta, search } = useSearch();

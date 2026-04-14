@@ -3,7 +3,7 @@ import axios from "axios";
 import SuggestionsDropdown from "./SuggestionsDropdown";
 import "./SearchDashboard.css";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE = "http://10.145.211.56:4000";
 
 export default function SearchDashboard() {
   const [query, setQuery] = useState("");

@@ -19,7 +19,8 @@ echo "My IP is: $MY_IP"
 docker rm -f solr_velocity >/dev/null 2>&1
 
 # Pass -z and --host explicitly, AND use -f so the container doesn't exit immediately!
-docker run -d -p 8983:8983 --name solr_velocity -e SOLR_HOST="$MY_IP" solr:9 solr -c -f -z "$BRAIN_IP:2181" --host "$MY_IP" -m 2g
+# docker run -d -p 8983:8983 --name solr_velocity -e SOLR_HOST="$MY_IP" solr:9 solr -c -f -z "$BRAIN_IP:2181" --host "$MY_IP" -m 2g
+docker run -d -p 8983:8983 --name solr_velocity -v velocity_solr_data:/var/solr -e ZK_HOST="$BRAIN_IP:2181" -e SOLR_HOST="$MY_IP" solr:9 solr -c -f -m 2g
 
 echo "================================"
 echo "Waiting for connection to establish..."
