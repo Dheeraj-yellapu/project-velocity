@@ -152,10 +152,23 @@ def merge_datasets():
         logging.info(f"Processing dataset: {file_path.name}")
 
         try:
+            records = []
             with file_path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
+                try:
+                    data = json.load(f)
+                    records = extract_records(data)
+                except json.JSONDecodeError:
+                    # Fallback to JSON Lines (newline separated JSON)
+                    f.seek(0)
+                    for line_number, line in enumerate(f, 1):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            logging.warning(f"Skipping invalid JSON line {line_number} in {file_path.name}")
 
-            records = extract_records(data)
             count_added = 0
 
             for r in records:

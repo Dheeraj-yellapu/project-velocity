@@ -48,22 +48,7 @@ def load_to_solr():
 
     logging.info(f"Indexing {len(docs)} documents to {SOLR_URL}/{COLLECTION}")
 
-    # Step 1: Clear old data (full re-index to handle dedup correctly)
-    delete_url = f"{SOLR_URL}/{COLLECTION}/update?commit=true"
-    try:
-        res = requests.post(
-            delete_url,
-            json={"delete": {"query": "*:*"}},
-            headers={"Content-Type": "application/json"},
-            timeout=60
-        )
-        res.raise_for_status()
-        logging.info("Cleared existing index")
-    except Exception as e:
-        logging.error(f"Failed to clear index: {e}")
-        raise
-
-    # Step 2: Index in batches
+    # Step 1: Index in batches (Append Mode)
     update_url = f"{SOLR_URL}/{COLLECTION}/update?commit=true"
     total_indexed = 0
 

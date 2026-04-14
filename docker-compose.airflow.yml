@@ -1,9 +1,8 @@
-x-airflow-common:
-  &airflow-common
+x-airflow-common: &airflow-common
   image: apache/airflow:2.8.1
   environment:
-    - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+    - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+    - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/dags/airflow.db
     - AIRFLOW__CORE__LOAD_EXAMPLES=False
     - _AIRFLOW_DB_UPGRADE=True
     - _AIRFLOW_WWW_USER_CREATE=True
