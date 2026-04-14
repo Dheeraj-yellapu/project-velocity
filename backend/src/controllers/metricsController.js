@@ -81,9 +81,9 @@ function formatHours(ms) {
 
 async function fetchSystemMetrics(baseUrl, index) {
   const [sysRes, coreRes, clusterRes] = await Promise.all([
-    axios.get(`${baseUrl}/admin/info/system?wt=json`, { timeout: 8000 }),
-    axios.get(`${baseUrl}/admin/cores?action=STATUS&wt=json`, { timeout: 8000 }),
-    axios.get(`${baseUrl}/admin/collections?action=CLUSTERSTATUS&wt=json`, { timeout: 8000 }),
+    axios.get(`${baseUrl}/admin/info/system?wt=json`, { timeout: 15000 }),
+    axios.get(`${baseUrl}/admin/cores?action=STATUS&wt=json`, { timeout: 15000 }),
+    axios.get(`${baseUrl}/admin/collections?action=CLUSTERSTATUS&wt=json`, { timeout: 15000 }),
   ]);
 
   const sysData = sysRes.data || {};

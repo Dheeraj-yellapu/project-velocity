@@ -4,16 +4,18 @@ import https from "https";
 import { SOLR_URL, SOLR_COLLECTION } from "../config/solr.js";
 
 // Connection pooling for better throughput under load
-// With 100 concurrent users, allow up to 50 persistent connections
+// With 400+ concurrent users, allow up to 500 persistent connections
 // Keeps sockets alive to reuse TCP connections (huge latency savings)
 const httpAgent = new http.Agent({ 
   keepAlive: true, 
-  maxSockets: 50,
+  maxSockets: 500,
+  maxFreeSockets: 100,
   freeSocketTimeout: 30000  // Free up idle sockets after 30s
 });
 const httpsAgent = new https.Agent({ 
   keepAlive: true, 
-  maxSockets: 50,
+  maxSockets: 500,
+  maxFreeSockets: 100,
   freeSocketTimeout: 30000  // Free up idle sockets after 30s
 });
 
@@ -41,7 +43,7 @@ async function searchSolr(queryParams) {
 
   try {
     const { data } = await axios.get(url, {
-      timeout: 8000, // 8s timeout to prevent hanging
+      timeout: 15000, // 15s timeout to handle remote network latency + queue wait
       headers: { Accept: "application/json" },
       httpAgent,
       httpsAgent,

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import cluster from "node:cluster";
 import os from "node:os";
+import http from "node:http";
 import app from "./app.js";
 
 const PORT = process.env.PORT || 4000;
@@ -22,11 +23,18 @@ if (useCluster && cluster.isPrimary) {
     cluster.fork();
   });
 } else {
-  app.listen(PORT, () => {
+  // Create HTTP server with optimized socket settings for high concurrency
+  const server = http.createServer(app);
+  
+  // Increase max concurrent connections per worker
+  server.maxConnections = 2000;
+  server.maxRequestsPerSocket = 100; // Reuse sockets for up to 100 requests
+  
+  server.listen(PORT, () => {
     if (useCluster) {
-      console.log(`[Worker ${process.pid}] Listening on port ${PORT}`);
+      console.log(`[Worker ${process.pid}] Listening on port ${PORT} (maxConnections: 2000)`);
     } else {
-      console.log(`Backend listening on port ${PORT} (single-process mode)`);
+      console.log(`Backend listening on port ${PORT} (single-process mode, maxConnections: 2000)`);
       console.log(`Health check: http://localhost:${PORT}/health`);
     }
   });

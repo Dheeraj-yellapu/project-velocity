@@ -7,10 +7,10 @@ import os from "os";
 /** ═══════════════════════════════════════════════════════════════════
  *  ── L1: In-Memory Cache (0ms latency) ─────────────────────────────
  *  Fastest layer: serves repeated queries without ANY network call.
- *  TTL: 30 seconds. Max entries: 500 (auto-evicts oldest).
+ *  TTL: 2 minutes. Max entries: 2000 (auto-evicts oldest).
  *  ═══════════════════════════════════════════════════════════════════ */
-const L1_TTL_MS = 30_000; // 30 seconds
-const L1_MAX_ENTRIES = 500;
+const L1_TTL_MS = 120_000; // 2 minutes (was 30s, now 4x longer for better hit rate)
+const L1_MAX_ENTRIES = 2000; // 4x larger cache (was 500, now 2000 for ~8MB per backend)
 const memoryCache = new Map();
 
 function l1Get(key) {
