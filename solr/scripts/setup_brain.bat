@@ -12,7 +12,7 @@ echo ================================
 echo Starting ZooKeeper "Brain"...
 echo ================================
 docker rm -f velocity_zk >nul 2>&1
-docker run -d -p 2181:2181 --name velocity_zk zookeeper:3.8
+docker run -d -p 2181:2181 --name velocity_zk -v velocity_zk_data:/data -v velocity_zk_datalog:/datalog zookeeper:3.8
 
 echo Waiting for ZooKeeper to initialize...
 timeout /t 5 >nul
@@ -22,7 +22,7 @@ echo Starting Solr Brain Node...
 echo ================================
 docker rm -f solr_velocity >nul 2>&1
 REM SOLR_HOST is critical so other machines can route back to this node
-docker run -d -p 8983:8983 --name solr_velocity -e ZK_HOST="%MY_IP%:2181" -e SOLR_HOST="%MY_IP%" solr:9 solr -c -f -m 2g
+docker run -d -p 8983:8983 --name solr_velocity -v velocity_solr_data:/var/solr -e ZK_HOST="%MY_IP%:2181" -e SOLR_HOST="%MY_IP%" solr:9 solr -c -f -m 2g
 
 echo Waiting for Solr to boot...
 timeout /t 10 >nul

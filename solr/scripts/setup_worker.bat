@@ -18,7 +18,7 @@ echo My IP is: %MY_IP%
 docker rm -f solr_velocity >nul 2>&1
 
 REM SOLR_HOST is critical so the Brain knows how to route traffic back to you!
-docker run -d -p 8983:8983 --name solr_velocity -e ZK_HOST="%BRAIN_IP%:2181" -e SOLR_HOST="%MY_IP%" solr:9 solr -c -f -m 2g
+docker run -d -p 8983:8983 --name solr_velocity -v velocity_solr_data:/var/solr -e ZK_HOST="%BRAIN_IP%:2181" -e SOLR_HOST="%MY_IP%" solr:9 solr -c -f -m 2g
 
 echo ================================
 echo Waiting for connection to establish...

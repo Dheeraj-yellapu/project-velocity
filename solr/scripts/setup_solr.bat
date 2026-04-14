@@ -8,9 +8,9 @@ if "%BRAIN_IP%"=="" (
 )
 
 echo ================================
-echo Deleting old collection to force schema reload...
+echo Skipping collection deletion to preserve existing data across restarts...
 echo ================================
-curl "http://%BRAIN_IP%:8983/solr/admin/collections?action=DELETE&name=global_news"
+REM curl "http://%BRAIN_IP%:8983/solr/admin/collections?action=DELETE&name=global_news"
 echo.
 
 echo ================================
