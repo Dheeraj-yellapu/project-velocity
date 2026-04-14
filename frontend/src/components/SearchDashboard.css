@@ -8,6 +8,9 @@
   background: #0a0e17;
   color: #e6edf3;
   font-family: "DM Sans", "Inter", system-ui, sans-serif;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Header ──────────────────────────────────────────────────────── */
@@ -186,6 +189,7 @@
     opacity: 0;
     transform: translateY(-8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -263,10 +267,12 @@
 }
 
 @keyframes pulse-dot {
+
   0%,
   100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.4;
   }
@@ -329,6 +335,7 @@
     transform: scale(0.8);
     opacity: 1;
   }
+
   100% {
     transform: scale(1.6);
     opacity: 0;
@@ -581,6 +588,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -603,6 +611,7 @@
     transform: scale(0.95);
     opacity: 0;
   }
+
   to {
     transform: scale(1);
     opacity: 1;
@@ -683,9 +692,11 @@
 .bench-stat-value.amber {
   color: #f59e0b;
 }
+
 .bench-stat-value.green {
   color: #10b981;
 }
+
 .bench-stat-value.blue {
   color: #60a5fa;
 }
@@ -744,9 +755,11 @@
 .bench-modal::-webkit-scrollbar {
   width: 6px;
 }
+
 .bench-modal::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .bench-modal::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;

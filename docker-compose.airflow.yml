@@ -1,5 +1,3 @@
-version: '3.8'
-
 x-airflow-common:
   &airflow-common
   image: apache/airflow:2.8.1
@@ -11,10 +9,15 @@ x-airflow-common:
     - _AIRFLOW_WWW_USER_CREATE=True
     - _AIRFLOW_WWW_USER_USERNAME=admin
     - _AIRFLOW_WWW_USER_PASSWORD=admin
+    # Solr connection for the Load step
+    - SOLR_URL=http://10.145.245.107:8983/solr
+    - SOLR_COLLECTION=global_news
+    - _PIP_ADDITIONAL_REQUIREMENTS=requests
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
     - ./airflow/plugins:/opt/airflow/plugins
+    # Mount the data directory so Airflow can read raw/ and write processed/
     - ./data:/opt/airflow/data
   user: "${AIRFLOW_UID:-50000}:0"
 

@@ -335,9 +335,8 @@ export default function SearchDashboard() {
             <div className="metric-card">
               <span className="metric-label">Data Source</span>
               <span
-                className={`source-pill ${
-                  metrics.source === "cache" ? "pill-green" : "pill-blue"
-                }`}
+                className={`source-pill ${metrics.source === "cache" ? "pill-green" : "pill-blue"
+                  }`}
               >
                 <span className="pill-dot" />
                 {metrics.source === "cache"

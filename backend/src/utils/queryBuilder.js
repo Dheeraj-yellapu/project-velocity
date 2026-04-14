@@ -41,7 +41,7 @@ function buildSearchQuery({
   if (from || to) {
     const start = from || "*";
     const end = to || "*";
-    fq.push(`pub:[${start} TO ${end}]`);
+    fq.push(`published_at:[${start} TO ${end}]`);
   }
 
   // ── Pagination ────────────────────────────────────────────────────
@@ -55,21 +55,21 @@ function buildSearchQuery({
   const params = {
     q: safeQ,
     defType: "edismax",
-    qf: "title^5 type^4 sum^2 body^1",
-    fl: "title,sum,type,pub,body,id,url,lang",
+    qf: "title^5 type^4 summary^2 body^1",
+    fl: "title,summary,type,published_at,body,id,url,lang",
     rows,
     start,
   };
 
   // ── Sorting ───────────────────────────────────────────────────────
   if (sortParam === "newest") {
-    params.sort = "pub desc";
+    params.sort = "published_at desc";
   } else if (sortParam === "oldest") {
-    params.sort = "pub asc";
+    params.sort = "published_at asc";
   } else if (sortParam === "date") {
-    params.sort = "pub desc";
+    params.sort = "published_at desc";
   } else if (sortParam === "date_asc") {
-    params.sort = "pub asc";
+    params.sort = "published_at asc";
   }
   // "relevance" (default) uses edismax score — no explicit sort needed
 
