@@ -189,16 +189,6 @@ export default function AdminDashboard({ activeSection }) {
       setTogglingSecurity(false);
     }
   };
-      } else {
-        setSettingsSuccess(payload.message || "All logs have been cleared.");
-        await fetchAnalyticsData();
-      }
-    } catch (_err) {
-      setSettingsError("Unable to clear logs right now.");
-    } finally {
-      setClearingLogs(false);
-    }
-  };
 
   if (!analytics) {
     return <div className="admin-overview admin-loading">Loading Live Analytics...</div>;
