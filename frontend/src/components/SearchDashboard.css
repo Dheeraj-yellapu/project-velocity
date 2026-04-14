@@ -8,9 +8,6 @@
   background: #0a0e17;
   color: #e6edf3;
   font-family: "DM Sans", "Inter", system-ui, sans-serif;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 /* ── Header ──────────────────────────────────────────────────────── */
