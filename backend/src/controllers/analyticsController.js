@@ -38,9 +38,9 @@ async function analyticsController(req, res) {
     // Filter logs within range
     const filteredLogs = logs.filter(l => l.timestamp >= rangeStartTime);
 
-    // Current QPS (last 60 seconds)
-    const recent60s = logs.filter(l => l.timestamp >= now - 60000);
-    const currentQps = recent60s.length / 60;
+    // Current QPS (true 1-second window, no averaging)
+    const recent5sjust = logs.filter(l => l.timestamp >= now - 5000);
+    const currentQps = recent5s.length;
 
     // Overall stats in range
     let totalLatency = 0;
