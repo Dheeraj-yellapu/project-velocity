@@ -90,6 +90,74 @@ function nodeIpsToText(nodeIps) {
   return [...new Set(nodeIps)].join(", ");
 }
 
+const HARD_TOPICS = [
+  "ENVIRONMENT",
+  "BUSINESS",
+  "POLITICS",
+  "SPORTS",
+  "ECONOMY",
+  "TECHNOLOGY",
+  "HEALTH",
+  "WORLD",
+];
+
+function parseTypeFacets(solrResponse) {
+  const facetValues = solrResponse?.facet_counts?.facet_fields?.type || [];
+  const topics = [];
+
+  for (let i = 0; i < facetValues.length; i += 2) {
+    const value = facetValues[i];
+    const count = facetValues[i + 1];
+    if (typeof value === "string" && value.trim()) {
+      topics.push({ value, count: Number(count) || 0 });
+    }
+  }
+
+  return topics.sort((a, b) => a.value.localeCompare(b.value));
+}
+
+async function fetchMatchingTopics(searchQuery = "") {
+  const normalizedQuery = String(searchQuery || "").trim().toLowerCase();
+  const facetQuery = {
+    q: "*:*",
+    rows: 0,
+    facet: "true",
+    "facet.field": "type",
+    "facet.limit": 25,
+    "facet.mincount": 1,
+    "facet.sort": "index",
+  };
+
+  if (normalizedQuery) {
+    facetQuery["facet.contains"] = normalizedQuery;
+    facetQuery["facet.contains.ignoreCase"] = "true";
+  }
+
+  const solrResponse = await searchSolr(facetQuery);
+  const facetTopics = parseTypeFacets(solrResponse);
+
+  const hardTopics = HARD_TOPICS
+    .filter((topic) => !normalizedQuery || topic.toLowerCase().includes(normalizedQuery))
+    .map((topic) => ({ value: topic, count: 0 }));
+
+  const merged = new Map();
+  [...facetTopics, ...hardTopics].forEach((topic) => {
+    const key = String(topic.value || "").toLowerCase();
+    if (!key) return;
+    const existing = merged.get(key);
+    if (!existing || Number(topic.count || 0) > Number(existing.count || 0)) {
+      merged.set(key, { value: String(topic.value).trim(), count: Number(topic.count) || 0 });
+    }
+  });
+
+  const topics = [...merged.values()].sort((a, b) => a.value.localeCompare(b.value, undefined, { sensitivity: "base" }));
+  const matchedTopic = normalizedQuery
+    ? topics.find((topic) => String(topic.value).toLowerCase() === normalizedQuery)?.value || null
+    : null;
+
+  return { topics, matchedTopic };
+}
+
 async function singleFlightSolrQuery(cacheKey, queryParams) {
   if (inflightQueries.has(cacheKey)) {
     return inflightQueries.get(cacheKey);
@@ -260,4 +328,14 @@ async function searchController(req, res, next) {
   }
 }
 
-export { searchController };
+async function topicFacetsController(req, res, next) {
+  try {
+    const searchQuery = req.query.q || "";
+    const { topics, matchedTopic } = await fetchMatchingTopics(searchQuery);
+    return res.json({ topics, matchedTopic });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export { searchController, topicFacetsController };

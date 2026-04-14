@@ -15,17 +15,27 @@ export function useSearch() {
     setLoading(true);
     setError(null);
     const t0 = performance.now();
+    const requestParams = {
+      query: q,
+      type: f.type || undefined,
+      lang: f.lang || undefined,
+      from: f.from || undefined,
+      to: f.to || undefined,
+      sort: f.sort || "relevance",
+      rows: f.rows || 10,
+    };
+    console.debug("[SearchDebug] frontend.search.request", requestParams);
     try {
-      const data = await searchService.search({
+      const data = await searchService.search(requestParams);
+      setResults(data.results || []);
+      console.debug("[SearchDebug] frontend.search.response", {
         query: q,
         type: f.type || undefined,
-        lang: f.lang || undefined,
-        from: f.from || undefined,
-        to: f.to || undefined,
-        sort: f.sort || "relevance",
-        rows: f.rows || 10,
+        total: data.total || 0,
+        source: data.source || null,
+        qtime_ms: data.qtime_ms || null,
+        total_latency_ms: data.total_latency_ms || null,
       });
-      setResults(data.results || []);
       setMeta({
         total: data.total || 0,
         elapsed: ((performance.now() - t0) / 1000).toFixed(2),
@@ -34,6 +44,11 @@ export function useSearch() {
         total_latency_ms: data.total_latency_ms || null,
       });
     } catch (e) {
+      console.debug("[SearchDebug] frontend.search.error", {
+        query: q,
+        type: f.type || undefined,
+        message: e?.message,
+      });
       setError(e.message);
     } finally {
       setLoading(false);
