@@ -18,6 +18,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: velocity-backend-1
+    hostname: backend-1
     ports:
       - "4000:4000"
     environment:
@@ -40,6 +41,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: velocity-backend-2
+    hostname: backend-2
     ports:
       - "4001:4000"
     environment:
@@ -62,6 +64,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: velocity-backend-3
+    hostname: backend-3
     ports:
       - "4002:4000"
     environment:

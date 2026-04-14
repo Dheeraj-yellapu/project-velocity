@@ -37,5 +37,4 @@ __pycache__/
 
 # Solr/data temporary exports
 solr/**/*.bak
-data/raw/*.zip
-data/raw/*.gz
+data/raw/
