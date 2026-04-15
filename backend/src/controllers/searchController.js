@@ -204,7 +204,9 @@ async function singleFlightSolrQuery(cacheKey, queryParams) {
  *  ═══════════════════════════════════════════════════════════════════ */
 async function searchController(req, res, next) {
   const startTime = performance.now();  // Use high-precision timer (microsecond accuracy)
+  const backendIp = getBackendIp(req);
   const solrIp = getSolrIp();
+
 
   try {
     const rawQuery = (req.query.q || "").trim();
