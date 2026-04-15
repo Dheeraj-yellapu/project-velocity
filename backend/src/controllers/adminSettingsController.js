@@ -1,6 +1,7 @@
 import {
   clearSearchMetrics,
   getAdminPasswordMeta,
+  resetHighestQpsMetric,
   setAdminPassword,
   verifyAdminPassword,
 } from "../utils/redisClient.js";
@@ -63,6 +64,16 @@ async function clearLogsController(_req, res) {
   }
 }
 
+async function resetHighestQpsController(_req, res) {
+  try {
+    await resetHighestQpsMetric();
+    return res.json({ ok: true, message: "Highest QPS has been reset" });
+  } catch (error) {
+    console.error("[AdminSettings] resetHighestQps error:", error);
+    return res.status(500).json({ ok: false, error: "Failed to reset highest QPS", details: error.message });
+  }
+}
+
 async function passwordMetaController(_req, res) {
   try {
     const meta = await getAdminPasswordMeta();
@@ -73,4 +84,4 @@ async function passwordMetaController(_req, res) {
   }
 }
 
-export { verifyAdminController, changePasswordController, clearLogsController, passwordMetaController };
+export { verifyAdminController, changePasswordController, clearLogsController, resetHighestQpsController, passwordMetaController };

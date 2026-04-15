@@ -3,6 +3,7 @@ import {
   verifyAdminController,
   changePasswordController,
   clearLogsController,
+  resetHighestQpsController,
   passwordMetaController,
 } from "../controllers/adminSettingsController.js";
 
@@ -11,6 +12,7 @@ const router = express.Router();
 router.post("/verify", verifyAdminController);
 router.post("/change-password", changePasswordController);
 router.post("/clear-logs", clearLogsController);
+router.post("/reset-highest-qps", resetHighestQpsController);
 router.get("/password-meta", passwordMetaController);
 
 export default router;

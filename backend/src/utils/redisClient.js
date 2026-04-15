@@ -16,6 +16,12 @@ const MAX_RETRIES = 3;
 const DEFAULT_ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "velocity2024";
 const PASSWORD_CHANGED_AT_KEY = "admin:password:changedAt";
 const ADMIN_SETTINGS_FILE = new URL("../../.admin-settings.json", import.meta.url);
+const ANALYTICS_REQUESTS_KEY = "analytics:requests";
+const ANALYTICS_LOGS_KEY = "analytics:logs";
+const ANALYTICS_HIGHEST_QPS_KEY = "analytics:highestQps";
+const ANALYTICS_HIGHEST_QPS_RESET_AT_KEY = "analytics:highestQpsResetAt";
+const ANALYTICS_SECOND_QPS_PREFIX = "analytics:qps:sec:";
+const ANALYTICS_SECOND_QPS_TTL_SECONDS = 2 * 60 * 60;
 
 let client = null;
 let isConnected = false;
@@ -25,8 +31,54 @@ let retryCount = 0;
 
 // Local fallback memory list to keep Admin Dashboard alive when Redis is down
 const localLogsFallback = [];
+const localSecondQpsCounts = new Map();
+let localHighestQpsFallback = 0;
+let localHighestQpsResetAtFallback = 0;
 let localAdminPasswordFallback = DEFAULT_ADMIN_PASSWORD;
 let localPasswordChangedAtFallback = Date.now();
+
+function normalizeMetricTimestamp(ts) {
+  const n = Number(ts);
+  return Number.isFinite(n) ? n : Date.now();
+}
+
+function isMetricError(metric) {
+  const status = typeof metric?.status === "string" ? metric.status.toLowerCase() : "ok";
+  return status === "error";
+}
+
+function updateLocalHighestQps(metric) {
+  if (isMetricError(metric)) return;
+
+  const secondKey = Math.floor(normalizeMetricTimestamp(metric.timestamp) / 1000);
+  const nextCount = (localSecondQpsCounts.get(secondKey) || 0) + 1;
+  localSecondQpsCounts.set(secondKey, nextCount);
+
+  if (nextCount > localHighestQpsFallback) {
+    localHighestQpsFallback = nextCount;
+  }
+
+  // Keep local map bounded to avoid unbounded growth in fallback mode.
+  const cutoff = secondKey - ANALYTICS_SECOND_QPS_TTL_SECONDS;
+  for (const key of localSecondQpsCounts.keys()) {
+    if (key < cutoff) localSecondQpsCounts.delete(key);
+  }
+}
+
+async function updatePersistentHighestQps(redis, metric) {
+  if (isMetricError(metric)) return;
+
+  const secondKey = Math.floor(normalizeMetricTimestamp(metric.timestamp) / 1000);
+  const secondCounterKey = `${ANALYTICS_SECOND_QPS_PREFIX}${secondKey}`;
+  const currentSecondCount = await redis.incr(secondCounterKey);
+  await redis.expire(secondCounterKey, ANALYTICS_SECOND_QPS_TTL_SECONDS);
+
+  const previousHighestRaw = await redis.get(ANALYTICS_HIGHEST_QPS_KEY);
+  const previousHighest = Number(previousHighestRaw);
+  if (!Number.isFinite(previousHighest) || currentSecondCount > previousHighest) {
+    await redis.set(ANALYTICS_HIGHEST_QPS_KEY, String(currentSecondCount));
+  }
+}
 
 async function readLocalAdminSettings() {
   try {
@@ -204,17 +256,27 @@ async function logSearchMetric(metric) {
     // If Redis is dead, use in-memory fallback so Admin dashboard still works!
     localLogsFallback.unshift(metric);
     if (localLogsFallback.length > 500) localLogsFallback.pop();
+    updateLocalHighestQps(metric);
     return;
   }
   try {
     const redis = await getClient();
-    if (!redis) return;
-    const key = "analytics:requests";
-    await redis.lPush(key, JSON.stringify(metric));
+    if (!redis) {
+      localLogsFallback.unshift(metric);
+      if (localLogsFallback.length > 500) localLogsFallback.pop();
+      updateLocalHighestQps(metric);
+      return;
+    }
+
+    await redis.lPush(ANALYTICS_REQUESTS_KEY, JSON.stringify(metric));
     // Keep only the last 10000 queries
-    await redis.lTrim(key, 0, 9999);
+    await redis.lTrim(ANALYTICS_REQUESTS_KEY, 0, 9999);
+    await updatePersistentHighestQps(redis, metric);
   } catch (err) {
     console.warn("[Redis] logMetric error:", err.message);
+    localLogsFallback.unshift(metric);
+    if (localLogsFallback.length > 500) localLogsFallback.pop();
+    updateLocalHighestQps(metric);
   }
 }
 
@@ -226,11 +288,25 @@ async function getSearchMetrics() {
   try {
     const redis = await getClient();
     if (!redis) return localLogsFallback;
-    const elements = await redis.lRange("analytics:requests", 0, -1);
+    const elements = await redis.lRange(ANALYTICS_REQUESTS_KEY, 0, -1);
     return elements.map((e) => JSON.parse(e));
   } catch (err) {
     console.warn("[Redis] getMetrics error:", err.message);
     return localLogsFallback;
+  }
+}
+
+async function getHighestQps() {
+  if (connectFailed) return localHighestQpsFallback;
+  try {
+    const redis = await getClient();
+    if (!redis) return localHighestQpsFallback;
+    const raw = await redis.get(ANALYTICS_HIGHEST_QPS_KEY);
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  } catch (err) {
+    console.warn("[Redis] getHighestQps error:", err.message);
+    return localHighestQpsFallback;
   }
 }
 
@@ -239,13 +315,66 @@ async function getSearchMetrics() {
  */
 async function clearSearchMetrics() {
   localLogsFallback.length = 0;
+  localSecondQpsCounts.clear();
+  localHighestQpsFallback = 0;
+  localHighestQpsResetAtFallback = 0;
   if (connectFailed) return;
   try {
     const redis = await getClient();
     if (!redis) return;
-    await redis.del(["analytics:requests", "analytics:logs"]);
+    await redis.del([
+      ANALYTICS_REQUESTS_KEY,
+      ANALYTICS_LOGS_KEY,
+      ANALYTICS_HIGHEST_QPS_KEY,
+      ANALYTICS_HIGHEST_QPS_RESET_AT_KEY,
+    ]);
   } catch (err) {
     console.warn("[Redis] clearSearchMetrics error:", err.message);
+  }
+}
+
+/**
+ * Reset only the highest QPS metric and per-second rolling counters.
+ * Search logs remain untouched.
+ */
+async function resetHighestQpsMetric() {
+  const resetAt = Date.now();
+  localSecondQpsCounts.clear();
+  localHighestQpsFallback = 0;
+  localHighestQpsResetAtFallback = resetAt;
+
+  if (connectFailed) return;
+
+  try {
+    const redis = await getClient();
+    if (!redis) return;
+
+    await redis.del(ANALYTICS_HIGHEST_QPS_KEY);
+    await redis.set(ANALYTICS_HIGHEST_QPS_RESET_AT_KEY, String(resetAt));
+    const secondKeys = await redis.keys(`${ANALYTICS_SECOND_QPS_PREFIX}*`);
+    if (Array.isArray(secondKeys) && secondKeys.length > 0) {
+      await redis.del(secondKeys);
+    }
+  } catch (err) {
+    console.warn("[Redis] resetHighestQpsMetric error:", err.message);
+  }
+}
+
+async function getHighestQpsResetAt() {
+  if (connectFailed) return localHighestQpsResetAtFallback;
+  try {
+    const redis = await getClient();
+    if (!redis) return localHighestQpsResetAtFallback;
+    const raw = await redis.get(ANALYTICS_HIGHEST_QPS_RESET_AT_KEY);
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      localHighestQpsResetAtFallback = parsed;
+      return parsed;
+    }
+    return 0;
+  } catch (err) {
+    console.warn("[Redis] getHighestQpsResetAt error:", err.message);
+    return localHighestQpsResetAtFallback;
   }
 }
 
@@ -362,7 +491,10 @@ export {
   CACHE_TTL,
   logSearchMetric,
   getSearchMetrics,
+  getHighestQps,
+  getHighestQpsResetAt,
   clearSearchMetrics,
+  resetHighestQpsMetric,
   getAdminPassword,
   setAdminPassword,
   verifyAdminPassword,

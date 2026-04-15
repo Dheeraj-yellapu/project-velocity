@@ -1,4 +1,4 @@
-import { getSearchMetrics } from "../utils/redisClient.js";
+import { getHighestQps, getHighestQpsResetAt, getSearchMetrics } from "../utils/redisClient.js";
 
 function normalizeTimestamp(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -38,9 +38,9 @@ async function analyticsController(req, res) {
     // Filter logs within range
     const filteredLogs = logs.filter(l => l.timestamp >= rangeStartTime);
 
-    // Current QPS (true 1-second window, no averaging)
-    const recent5s = logs.filter(l => l.timestamp >= now - 5000);
-    const currentQps = recent5s.length;
+    // Average QPS (60-second window)
+    const recent60s = logs.filter(l => l.timestamp >= now - 60000);
+    const currentQps = recent60s.length / 60;
 
     // Overall stats in range
     let totalLatency = 0;
@@ -49,17 +49,19 @@ async function analyticsController(req, res) {
     const queryCounts = {};
 
     filteredLogs.forEach(l => {
-      totalLatency += l.latency;
+      const latency = Number(l.latency);
+      totalLatency += Number.isFinite(latency) ? latency : 0;
       const status = typeof l.status === "string" ? l.status.toLowerCase() : "ok";
       if (status === "error") errorCount++;
       if (l.source === "cache") cacheHits++;
       
-      const q = l.query.toLowerCase();
+      const q = typeof l.query === "string" ? l.query.toLowerCase() : "";
+      if (!q) return;
       if (!queryCounts[q]) {
         queryCounts[q] = { count: 0, latSum: 0 };
       }
       queryCounts[q].count++;
-      queryCounts[q].latSum += l.latency;
+      queryCounts[q].latSum += Number.isFinite(latency) ? latency : 0;
     });
 
     const throughput = filteredLogs.length;
@@ -68,22 +70,28 @@ async function analyticsController(req, res) {
     const cacheHitRate = throughput > 0 ? ((cacheHits / throughput) * 100).toFixed(1) : 0;
 
     // True peak QPS: max successful requests observed in any 1-second window in selected range.
+    const highestQpsResetAt = await getHighestQpsResetAt();
     const perSecondCounts = new Map();
     filteredLogs.forEach((l) => {
       const normalizedStatus = typeof l.status === "string" ? l.status.toLowerCase() : "ok";
       if (normalizedStatus === "error") return;
+      if (highestQpsResetAt > 0 && l.timestamp < highestQpsResetAt) return;
       const secondKey = Math.floor(l.timestamp / 1000);
       perSecondCounts.set(secondKey, (perSecondCounts.get(secondKey) || 0) + 1);
     });
-    const maxQpsPerSecond = perSecondCounts.size > 0
+    const maxQpsInRange = perSecondCounts.size > 0
       ? Math.max(...perSecondCounts.values())
       : 0;
+    const storedHighestQps = await getHighestQps();
+    const maxQpsPerSecond = Math.max(maxQpsInRange, storedHighestQps);
 
     // Deep Query Analytics
     const latencyDistribution = { fast: 0, medium: 0, slow: 0 };
     filteredLogs.forEach(l => {
-      if (l.latency < 50) latencyDistribution.fast++;
-      else if (l.latency < 200) latencyDistribution.medium++;
+      const latency = Number(l.latency);
+      if (!Number.isFinite(latency)) return;
+      if (latency < 50) latencyDistribution.fast++;
+      else if (latency < 200) latencyDistribution.medium++;
       else latencyDistribution.slow++;
     });
 
